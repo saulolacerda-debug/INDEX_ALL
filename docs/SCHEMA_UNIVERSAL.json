@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "file_name": "example.pdf",
+    "file_type": "pdf",
+    "file_size_bytes": 12345,
+    "modified_at": "2026-03-08T00:00:00",
+    "source_path": "C:/AI_PROJECTS/INDEX_ALL/data/samples/example.pdf"
+  },
+  "content": {
+    "blocks": [
+      {
+        "id": "block_0001",
+        "kind": "paragraph",
+        "title": null,
+        "text": "conteúdo extraído",
+        "locator": {
+          "page": 1,
+          "sheet": null,
+          "line_start": null,
+          "line_end": null
+        },
+        "extra": {}
+      }
+    ],
+    "parser_metadata": {}
+  },
+  "index": [
+    {
+      "id": "idx_0001",
+      "title": "Primeiro bloco",
+      "kind": "paragraph",
+      "locator": {
+        "page": 1
+      }
+    }
+  ],
+  "summary": "Resumo executivo do arquivo."
+}
