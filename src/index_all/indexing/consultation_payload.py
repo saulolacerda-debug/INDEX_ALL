@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import Counter
 
+from index_all.indexing.document_classifier import DocumentArchetype
+
 
 LOCATOR_KEYS = ("part", "book", "title", "chapter", "section", "subsection", "article", "paragraph", "inciso", "alinea", "item")
 STRUCTURE_KIND_ORDER = (
@@ -109,7 +111,16 @@ def _collect_structure_counts(blocks: list[dict]) -> dict[str, int]:
     return {kind: counts[kind] for kind in STRUCTURE_KIND_ORDER if counts[kind]}
 
 
-def _infer_domain(parser_metadata: dict, structure_counts: dict[str, int], blocks: list[dict]) -> str:
+def _infer_domain(document_archetype: DocumentArchetype, parser_metadata: dict, structure_counts: dict[str, int], blocks: list[dict]) -> str:
+    if document_archetype in {"legislation_normative", "legislation_amending_act"}:
+        return "legal_normative"
+    if document_archetype == "judicial_case":
+        return "judicial_document"
+    if document_archetype == "spreadsheet_structured":
+        return "tabular_document"
+    if document_archetype in {"xml_structured", "financial_statement_ofx"}:
+        return "structured_data_document"
+
     if structure_counts.get("article") or structure_counts.get("part") or parser_metadata.get("mode") == "structured_legal":
         return "legal_normative"
 
@@ -130,7 +141,14 @@ def _infer_primary_structure(parser_metadata: dict, structure_counts: dict[str, 
     return "flat_blocks"
 
 
-def build_content_payload(metadata: dict, content: dict, index_entries: list[dict], summary: str) -> dict:
+def build_content_payload(
+    metadata: dict,
+    content: dict,
+    index_entries: list[dict],
+    summary: str,
+    *,
+    document_archetype: DocumentArchetype,
+) -> dict:
     parser_metadata = dict(content.get("parser_metadata", {}))
     source_blocks = content.get("blocks", [])
 
@@ -148,7 +166,8 @@ def build_content_payload(metadata: dict, content: dict, index_entries: list[dic
 
     structure_counts = _collect_structure_counts(blocks)
     document_profile = {
-        "domain": _infer_domain(parser_metadata, structure_counts, blocks),
+        "domain": _infer_domain(document_archetype, parser_metadata, structure_counts, blocks),
+        "document_archetype": document_archetype,
         "primary_structure": _infer_primary_structure(parser_metadata, structure_counts),
         "block_count": len(blocks),
         "index_entry_count": _flatten_index_count(index_entries),
@@ -187,6 +206,7 @@ def build_content_payload(metadata: dict, content: dict, index_entries: list[dic
 
     return {
         "blocks": blocks,
+        "document_archetype": document_archetype,
         "parser_metadata": parser_metadata,
         "metadata": metadata,
         "summary": summary,
@@ -205,6 +225,7 @@ def build_index_payload(metadata: dict, consultation_payload: dict) -> list[dict
         "file_name": metadata.get("file_name"),
         "file_type": metadata.get("file_type"),
         "domain": consultation_payload.get("document_profile", {}).get("domain"),
+        "document_archetype": consultation_payload.get("document_profile", {}).get("document_archetype"),
         "primary_structure": consultation_payload.get("document_profile", {}).get("primary_structure"),
         "citation_template": consultation_payload.get("ai_ready", {}).get("citation_template"),
     }
@@ -250,6 +271,7 @@ def build_index_payload(metadata: dict, consultation_payload: dict) -> list[dict
 def build_metadata_payload(metadata: dict, consultation_payload: dict) -> dict:
     payload = dict(metadata)
     payload["artifact_role"] = "document_manifest"
+    payload["document_archetype"] = consultation_payload.get("document_profile", {}).get("document_archetype")
     payload["document_profile"] = consultation_payload.get("document_profile", {})
     payload["consultation_hints"] = {
         "summary": consultation_payload.get("summary"),
@@ -299,6 +321,7 @@ def build_ai_context_payload(
     return {
         "artifact_role": "ai_context_bundle",
         "schema_version": "1.0",
+        "document_archetype": document_profile.get("document_archetype"),
         "document_profile": document_profile,
         "metadata": metadata_payload,
         "consultation_hints": metadata_payload.get("consultation_hints", {}),

@@ -117,6 +117,7 @@ def _build_block_payload(blocks: list[dict]) -> list[dict]:
                 "locator": locator,
                 "locator_text": _format_locator_path(locator),
                 "position_text": _format_position(locator),
+                "manual_group": (block.get("extra") or {}).get("manual_group"),
             }
         )
     return payload
@@ -142,6 +143,8 @@ def _attach_anchors(entries: list[dict], blocks: list[dict]) -> list[dict]:
                 "kind_label": _kind_label(entry.get("kind")),
                 "locator": entry.get("locator", {}),
                 "locator_text": _format_locator_path(entry.get("locator", {})),
+                "level": entry.get("level"),
+                "parent_id": entry.get("parent_id"),
                 "anchor": anchor,
                 "children": _attach_anchors(entry.get("children") or [], blocks),
             }
@@ -165,6 +168,7 @@ def _build_payload(metadata: dict, content: dict, index_entries: list[dict], sum
     blocks = _build_block_payload(content.get("blocks", []))
     return {
         "metadata": metadata,
+        "document_profile": content.get("document_profile", {}),
         "parser_metadata": content.get("parser_metadata", {}),
         "summary": summary,
         "stats": _build_stats(blocks, index_entries),
@@ -1016,15 +1020,24 @@ def _build_html(payload: dict) -> str:
     }}
 
     function renderHero() {{
+      const archetype = data.document_profile && data.document_profile.document_archetype;
+      const subtitles = {{
+        legislation_normative: "Relatório navegável com hierarquia normativa completa do documento.",
+        legislation_amending_act: "Relatório navegável com separação entre dispositivo alterador e dispositivos alterados.",
+        manual_procedural: "Relatório navegável com índice procedural por títulos, seções e etapas internas.",
+      }};
       document.getElementById("hero-title").textContent = data.metadata.file_name || "Arquivo";
       document.getElementById("hero-subtitle").textContent =
-        "Relatório navegável gerado a partir dos artefatos estruturados do INDEX_ALL.";
+        subtitles[archetype] || "Relatório navegável gerado a partir dos artefatos estruturados do INDEX_ALL.";
 
       const heroMeta = document.getElementById("hero-meta");
       heroMeta.innerHTML = "";
 
       const pills = [
         data.metadata.file_type ? "Tipo: " + data.metadata.file_type : null,
+        data.document_profile && data.document_profile.document_archetype
+          ? "Arquétipo: " + data.document_profile.document_archetype
+          : null,
         "Blocos: " + data.stats.block_count,
         "Entradas no índice: " + data.stats.index_entry_count,
       ].filter(Boolean);
@@ -1067,6 +1080,9 @@ def _build_html(payload: dict) -> str:
       const items = [
         ["Nome", data.metadata.file_name],
         ["Tipo", data.metadata.file_type],
+        ["Arquétipo documental", data.document_profile && data.document_profile.document_archetype],
+        ["Domínio", data.document_profile && data.document_profile.domain],
+        ["Estrutura principal", data.document_profile && data.document_profile.primary_structure],
         ["Tamanho", data.metadata.file_size_bytes != null ? data.metadata.file_size_bytes + " bytes" : null],
         ["Modificado em", data.metadata.modified_at],
         ["Origem", data.metadata.source_path],

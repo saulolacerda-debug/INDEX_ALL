@@ -10,6 +10,7 @@ from index_all.indexing.consultation_payload import (
     build_index_payload,
     build_metadata_payload,
 )
+from index_all.indexing.document_classifier import classify_document_archetype
 from index_all.indexing.metadata_extractor import extract_common_metadata
 from index_all.indexing.structure_indexer import build_structure_index
 from index_all.indexing.summary_builder import build_summary
@@ -58,9 +59,18 @@ def process_file(file_path: Path, output_root: Path) -> Path:
     metadata = extract_common_metadata(file_path)
     content = parsed.get("content", {"blocks": [], "parser_metadata": {}})
     blocks = content.get("blocks", [])
-    index_entries = build_structure_index(blocks)
+    parser_metadata = content.get("parser_metadata", {})
+    document_archetype = classify_document_archetype(metadata, blocks, parser_metadata)
+    metadata = {**metadata, "document_archetype": document_archetype}
+    index_entries = build_structure_index(blocks, document_archetype=document_archetype)
     summary = build_summary(metadata, blocks, index_entries)
-    consultation_payload = build_content_payload(metadata, content, index_entries, summary)
+    consultation_payload = build_content_payload(
+        metadata,
+        content,
+        index_entries,
+        summary,
+        document_archetype=document_archetype,
+    )
     metadata_payload = build_metadata_payload(metadata, consultation_payload)
     index_payload = build_index_payload(metadata, consultation_payload)
     ai_context_payload = build_ai_context_payload(metadata_payload, consultation_payload, index_payload)

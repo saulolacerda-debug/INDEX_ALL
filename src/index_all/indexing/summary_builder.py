@@ -16,6 +16,7 @@ STRUCTURE_LABELS = {
     "inciso": "inciso(s)",
     "alinea": "alínea(s)",
     "item": "item(ns)",
+    "heading": "cabeçalho(s)",
 }
 
 
@@ -49,7 +50,7 @@ def _collect_structure_counts(blocks: list[dict]) -> str | None:
     return ", ".join(ordered_parts)
 
 
-def _render_outline(entries: list[dict], depth: int = 0, limit: int = 10) -> list[str]:
+def _render_outline(entries: list[dict], depth: int = 0, limit: int = 14) -> list[str]:
     lines: list[str] = []
     for entry in entries:
         if len(lines) >= limit:
@@ -60,6 +61,14 @@ def _render_outline(entries: list[dict], depth: int = 0, limit: int = 10) -> lis
         if children and len(lines) < limit:
             lines.extend(_render_outline(children, depth + 1, limit - len(lines)))
     return lines
+
+
+def _flatten_index_count(entries: list[dict]) -> int:
+    count = 0
+    for entry in entries:
+        count += 1
+        count += _flatten_index_count(entry.get("children") or [])
+    return count
 
 
 def build_summary(metadata: dict, blocks: list[dict], index_entries: list[dict] | None = None) -> str:
@@ -77,14 +86,22 @@ def build_summary(metadata: dict, blocks: list[dict], index_entries: list[dict] 
     file_name = metadata.get("file_name", "unknown")
     file_type = metadata.get("file_type", "unknown")
     block_count = len(blocks)
+    document_archetype = metadata.get("document_archetype") or "unknown"
 
-    sections = [f"Arquivo `{file_name}` do tipo `{file_type}` com {block_count} bloco(s) extraído(s)."]
+    sections = [
+        f"Arquivo `{file_name}` do tipo `{file_type}` com {block_count} bloco(s) extraído(s).",
+        f"Arquétipo documental: `{document_archetype}`.",
+    ]
 
     structure_counts = _collect_structure_counts(blocks)
     if structure_counts:
         sections.append(f"Estrutura identificada: {structure_counts}.")
 
     if index_entries:
+        sections.append(f"Índice hierárquico com {_flatten_index_count(index_entries)} entrada(s) navegáveis.")
+        top_level_titles = [str(entry.get("title")) for entry in index_entries[:6] if entry.get("title")]
+        if top_level_titles:
+            sections.append("Entradas de alto nível: " + " | ".join(top_level_titles) + ".")
         outline_lines = _render_outline(index_entries)
         if outline_lines:
             sections.append("Primeiros itens do índice:\n\n" + "\n".join(outline_lines))

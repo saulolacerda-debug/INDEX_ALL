@@ -10,6 +10,12 @@ from index_all.parsers.xlsx_parser import parse_xlsx
 from index_all.parsers.xml_parser import parse_xml
 
 from tests.helpers import (
+    AMENDING_SCOPE_SAMPLE_LINES,
+    NORMATIVE_WITH_FINAL_AMENDMENTS_LINES,
+    create_amending_csv,
+    create_amending_html,
+    create_amending_txt,
+    create_amending_xlsx,
     create_legal_csv,
     create_legal_html,
     create_legal_txt,
@@ -36,7 +42,7 @@ def test_textual_parsers_detect_legal_hierarchy_across_extensions(creator, parse
         result = parser(file_path)
         blocks = result["content"]["blocks"]
         parser_metadata = result["content"]["parser_metadata"]
-        index_entries = build_structure_index(blocks)
+        index_entries = build_structure_index(blocks, document_archetype="legislation_normative")
 
         assert parser_metadata["mode"] == "structured_legal"
         assert blocks[0]["kind"] == "preamble"
@@ -61,3 +67,70 @@ def test_textual_parsers_detect_legal_hierarchy_across_extensions(creator, parse
         assert book_entry["title"] == "Livro I - DISPOSIÇÕES GERAIS"
         assert subsection_entry["title"] == "Subseção I - Da Estrutura Inicial"
         assert article_entry["title"] == "Art. 1º - Esta lei estabelece normas gerais"
+
+
+@pytest.mark.parametrize(
+    ("creator", "parser", "file_name"),
+    (
+        (create_amending_html, parse_html, "ec_132.html"),
+        (create_amending_txt, parse_txt, "ec_132.txt"),
+        (create_amending_csv, parse_csv, "ec_132.csv"),
+        (create_amending_xlsx, parse_xlsx, "ec_132.xlsx"),
+    ),
+)
+def test_textual_parsers_keep_amended_devices_under_amending_article(creator, parser, file_name):
+    with workspace_test_dir() as temp_dir:
+        file_path = creator(temp_dir / file_name)
+
+        result = parser(file_path)
+        blocks = result["content"]["blocks"]
+        parser_metadata = result["content"]["parser_metadata"]
+        index_entries = build_structure_index(blocks, document_archetype="legislation_amending_act")
+
+        assert parser_metadata["mode"] == "structured_legal"
+
+        article_1_entry = next(entry for entry in index_entries if entry["kind"] == "article" and entry["title"].startswith("Art. 1º"))
+        amended_children = [child for child in article_1_entry["children"] if child["kind"] == "article"]
+
+        assert [child["title"] for child in amended_children] == [
+            "Art. 43 - Compete à lei complementar disciplinar aspectos gerais do sistema",
+            "Art. 50 - O Congresso Nacional e suas Casas terão competência para fiscalizar a execução",
+            "Art. 105 - Compete ao Superior Tribunal de Justiça",
+        ]
+        assert amended_children[0]["children"][0]["title"] == "§ 4º"
+        assert amended_children[2]["children"][0]["title"] == "Inciso I"
+        assert amended_children[2]["children"][0]["children"][0]["title"] == "Alínea j"
+        assert all(not entry["title"].startswith("Art. 43") for entry in index_entries)
+
+
+def test_txt_parser_closes_embedded_scope_for_amending_act():
+    with workspace_test_dir() as temp_dir:
+        file_path = temp_dir / "ec_132_scope.txt"
+        file_path.write_text("\n".join(AMENDING_SCOPE_SAMPLE_LINES), encoding="utf-8")
+
+        result = parse_txt(file_path)
+        blocks = result["content"]["blocks"]
+        index_entries = build_structure_index(blocks, document_archetype="legislation_amending_act")
+
+        article_1_entry = next(entry for entry in index_entries if entry["kind"] == "article" and entry["title"].startswith("Art. 1º"))
+        article_2_entry = next(entry for entry in index_entries if entry["kind"] == "article" and entry["title"].startswith("Art. 2º"))
+        article_3_entry = next(entry for entry in index_entries if entry["kind"] == "article" and entry["title"].startswith("Art. 3º"))
+
+        assert any(child["kind"] == "section" for child in article_1_entry["children"])
+        assert article_2_entry["parent_id"] is None
+        assert article_3_entry["parent_id"] is None
+
+
+def test_txt_parser_does_not_promote_cross_reference_articles():
+    with workspace_test_dir() as temp_dir:
+        file_path = temp_dir / "lcp_227_refs.txt"
+        file_path.write_text("\n".join(NORMATIVE_WITH_FINAL_AMENDMENTS_LINES), encoding="utf-8")
+
+        result = parse_txt(file_path)
+        blocks = result["content"]["blocks"]
+        article_titles = [block["title"] for block in blocks if block["kind"] == "article"]
+
+        assert "Art. 108" not in article_titles
+        assert "Art. 136" not in article_titles
+        assert "Art. 1º" in article_titles
+        assert "Art. 200" in article_titles

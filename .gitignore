@@ -28,3 +28,6 @@ data/processed/*
 # Samples
 data/samples/*
 !data/samples/.gitkeep
+
+# Validation outputs
+data/processed_step3_validation/
