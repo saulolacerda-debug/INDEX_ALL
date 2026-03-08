@@ -50,7 +50,7 @@ def _collect_structure_counts(blocks: list[dict]) -> str | None:
     return ", ".join(ordered_parts)
 
 
-def _render_outline(entries: list[dict], depth: int = 0, limit: int = 10) -> list[str]:
+def _render_outline(entries: list[dict], depth: int = 0, limit: int = 14) -> list[str]:
     lines: list[str] = []
     for entry in entries:
         if len(lines) >= limit:
@@ -86,8 +86,12 @@ def build_summary(metadata: dict, blocks: list[dict], index_entries: list[dict] 
     file_name = metadata.get("file_name", "unknown")
     file_type = metadata.get("file_type", "unknown")
     block_count = len(blocks)
+    document_archetype = metadata.get("document_archetype") or "unknown"
 
-    sections = [f"Arquivo `{file_name}` do tipo `{file_type}` com {block_count} bloco(s) extraído(s)."]
+    sections = [
+        f"Arquivo `{file_name}` do tipo `{file_type}` com {block_count} bloco(s) extraído(s).",
+        f"Arquétipo documental: `{document_archetype}`.",
+    ]
 
     structure_counts = _collect_structure_counts(blocks)
     if structure_counts:
@@ -95,6 +99,9 @@ def build_summary(metadata: dict, blocks: list[dict], index_entries: list[dict] 
 
     if index_entries:
         sections.append(f"Índice hierárquico com {_flatten_index_count(index_entries)} entrada(s) navegáveis.")
+        top_level_titles = [str(entry.get("title")) for entry in index_entries[:6] if entry.get("title")]
+        if top_level_titles:
+            sections.append("Entradas de alto nível: " + " | ".join(top_level_titles) + ".")
         outline_lines = _render_outline(index_entries)
         if outline_lines:
             sections.append("Primeiros itens do índice:\n\n" + "\n".join(outline_lines))

@@ -117,6 +117,7 @@ def _build_block_payload(blocks: list[dict]) -> list[dict]:
                 "locator": locator,
                 "locator_text": _format_locator_path(locator),
                 "position_text": _format_position(locator),
+                "manual_group": (block.get("extra") or {}).get("manual_group"),
             }
         )
     return payload
@@ -142,6 +143,8 @@ def _attach_anchors(entries: list[dict], blocks: list[dict]) -> list[dict]:
                 "kind_label": _kind_label(entry.get("kind")),
                 "locator": entry.get("locator", {}),
                 "locator_text": _format_locator_path(entry.get("locator", {})),
+                "level": entry.get("level"),
+                "parent_id": entry.get("parent_id"),
                 "anchor": anchor,
                 "children": _attach_anchors(entry.get("children") or [], blocks),
             }

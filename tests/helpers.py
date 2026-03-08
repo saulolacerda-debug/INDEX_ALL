@@ -57,6 +57,39 @@ MANUAL_DOCX_BLOCKS = (
     ("Heading 2", "Resumo"),
     (None, "Registrar o resultado final da análise no sistema."),
 )
+NORMATIVE_WITH_FINAL_AMENDMENTS_LINES = (
+    "LEI COMPLEMENTAR Nº 227, DE 13 DE JANEIRO DE 2026",
+    "O PRESIDENTE DA REPÚBLICA Faço saber que o Congresso Nacional decreta e eu sanciono a seguinte Lei Complementar:",
+    "LIVRO I",
+    "DAS DISPOSIÇÕES GERAIS",
+    "TÍTULO I",
+    "DO IMPOSTO SOBRE BENS E SERVIÇOS",
+    "CAPÍTULO I",
+    "DAS NORMAS INICIAIS",
+    "Seção I",
+    "Da incidência",
+    "Art. 1º Esta Lei Complementar institui normas gerais do IBS e da CBS.",
+    "Art. 2º O regime específico aplica-se às hipóteses previstas nesta Lei Complementar.",
+    "Art. 108 desta Lei Complementar aplica-se às operações de importação.",
+    "Art. 136 do ADCT permanece aplicável às hipóteses de transição.",
+    "Art. 200 Ficam alterados os arts. 20 e 21 da Lei Complementar nº 214, de 2025.",
+    "Art. 201 Revogam-se as disposições em contrário.",
+)
+AMENDING_SCOPE_SAMPLE_LINES = (
+    "EMENDA CONSTITUCIONAL Nº 132, DE 20 DE DEZEMBRO DE 2023",
+    "As Mesas da Câmara dos Deputados e do Senado Federal promulgam a seguinte Emenda ao texto constitucional:",
+    "Art. 1º A Constituição Federal passa a vigorar com as seguintes alterações:",
+    "\"Seção V-A",
+    "Do Comitê Gestor do Imposto sobre Bens e Serviços",
+    "Art. 43. Compete à lei complementar disciplinar aspectos gerais do sistema.",
+    "§ 4º Lei complementar poderá estabelecer normas específicas de coordenação.",
+    "Art. 50. O Congresso Nacional e suas Casas terão competência para fiscalizar a execução.",
+    "Art. 105. Compete ao Superior Tribunal de Justiça:",
+    "I - processar e julgar, originariamente, os conflitos de competência;",
+    "j) conflitos entre autoridades administrativas e judiciais relacionados ao novo regime;",
+    "Art. 2º Esta Emenda Constitucional entra em vigor na data de sua publicação.",
+    "Art. 3º Revogam-se as disposições em contrário.",
+)
 
 
 def create_legal_docx(path: Path) -> Path:

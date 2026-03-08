@@ -18,6 +18,7 @@ from index_all.parsers.legal_structure import (
 
 PDF_HEADER_RE = re.compile(r"^\d+\s+N[úu]mero\s+\d+\s*[–-]\s*\d{2}/\d{2}/\d{4}$", re.IGNORECASE)
 PDF_PAGE_ONLY_RE = re.compile(r"^\d+$")
+MANUAL_TITLE_HINTS = ("manual", "procedimento", "passo a passo", "guia")
 
 
 def _is_ignorable_pdf_line(text: str) -> bool:
@@ -77,13 +78,20 @@ def _build_page_blocks(page_texts: list[str]) -> list[dict]:
     return blocks
 
 
+def _should_prefer_manual(record_texts: list[str]) -> bool:
+    early_text = " ".join(normalize_text(text).lower() for text in record_texts[:10])
+    return any(hint in early_text for hint in MANUAL_TITLE_HINTS)
+
+
 def build_blocks_from_page_texts(page_texts: list[str]) -> tuple[list[dict], str]:
     records = _extract_records(page_texts)
     record_texts = [record.text for record in records]
-    if looks_like_legal_document(record_texts):
-        return build_legal_blocks(records), "structured_legal"
-    if looks_like_manual_document(record_texts):
+    is_manual_document = looks_like_manual_document(record_texts)
+    is_legal_document = looks_like_legal_document(record_texts)
+    if is_manual_document and (not is_legal_document or _should_prefer_manual(record_texts)):
         return build_manual_blocks(records), "structured_manual"
+    if is_legal_document:
+        return build_legal_blocks(records), "structured_legal"
     return _build_page_blocks(page_texts), "page_text"
 
 

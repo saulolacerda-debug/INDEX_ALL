@@ -61,6 +61,7 @@ def process_file(file_path: Path, output_root: Path) -> Path:
     blocks = content.get("blocks", [])
     parser_metadata = content.get("parser_metadata", {})
     document_archetype = classify_document_archetype(metadata, blocks, parser_metadata)
+    metadata = {**metadata, "document_archetype": document_archetype}
     index_entries = build_structure_index(blocks, document_archetype=document_archetype)
     summary = build_summary(metadata, blocks, index_entries)
     consultation_payload = build_content_payload(

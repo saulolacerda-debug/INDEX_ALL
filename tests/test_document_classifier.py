@@ -3,6 +3,9 @@ from __future__ import annotations
 import pytest
 
 from index_all.indexing.document_classifier import classify_document_archetype
+from index_all.parsers.pdf_parser import build_blocks_from_page_texts
+
+from tests.helpers import AMENDING_SCOPE_SAMPLE_LINES, NORMATIVE_WITH_FINAL_AMENDMENTS_LINES
 
 
 @pytest.mark.parametrize(
@@ -65,3 +68,64 @@ def test_classify_document_archetype_returns_expected_type(
     expected: str,
 ):
     assert classify_document_archetype(metadata, blocks, parser_metadata) == expected
+
+
+def test_classifier_prefers_normative_when_diploma_has_own_body_structure():
+    blocks, mode = build_blocks_from_page_texts(["\n".join(NORMATIVE_WITH_FINAL_AMENDMENTS_LINES)])
+
+    archetype = classify_document_archetype(
+        {
+            "file_name": "Lcp_227.pdf",
+            "file_stem": "Lcp_227",
+            "file_type": "pdf",
+            "source_path": "Lcp_227.pdf",
+        },
+        blocks,
+        {"mode": mode},
+    )
+
+    assert archetype == "legislation_normative"
+
+
+def test_classifier_keeps_ec_132_as_amending_act():
+    blocks, mode = build_blocks_from_page_texts(["\n".join(AMENDING_SCOPE_SAMPLE_LINES)])
+
+    archetype = classify_document_archetype(
+        {
+            "file_name": "EMENDA_CONSTITUCIONAL_N_132-23.pdf",
+            "file_stem": "EMENDA_CONSTITUCIONAL_N_132-23",
+            "file_type": "pdf",
+            "source_path": "EMENDA_CONSTITUCIONAL_N_132-23.pdf",
+        },
+        blocks,
+        {"mode": mode},
+    )
+
+    assert archetype == "legislation_amending_act"
+
+
+def test_classifier_keeps_operational_pdf_as_manual():
+    page_text = "\n".join(
+        (
+            "Apuração Assistida - Primeiros Passos",
+            "Objetivos",
+            "Apresentar o procedimento inicial de apuração assistida.",
+            "1. Acessar o Portal TRIBUTOS SOBRE BENS E SERVIÇOS",
+            "2. Clique no botão Enviar",
+            "Resumo",
+        )
+    )
+    blocks, mode = build_blocks_from_page_texts([page_text])
+
+    archetype = classify_document_archetype(
+        {
+            "file_name": "Apuração Assistida_Primeiros Passos 1.pdf",
+            "file_stem": "Apuração Assistida_Primeiros Passos 1",
+            "file_type": "pdf",
+            "source_path": "Apuração Assistida_Primeiros Passos 1.pdf",
+        },
+        blocks,
+        {"mode": mode},
+    )
+
+    assert archetype == "manual_procedural"

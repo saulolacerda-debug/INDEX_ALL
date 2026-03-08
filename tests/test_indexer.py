@@ -5,8 +5,9 @@ import json
 from index_all.indexing.structure_indexer import build_structure_index
 from index_all.main import iter_supported_files, process_file
 from index_all.parsers.docx_parser import parse_docx
+from index_all.parsers.pdf_parser import build_blocks_from_page_texts
 
-from tests.helpers import create_amending_docx, create_legal_docx, create_manual_docx, workspace_test_dir
+from tests.helpers import AMENDING_SCOPE_SAMPLE_LINES, create_amending_docx, create_legal_docx, create_manual_docx, workspace_test_dir
 
 
 def test_build_structure_index_creates_full_legal_hierarchy():
@@ -41,6 +42,10 @@ def test_build_structure_index_creates_full_legal_hierarchy():
         assert alinea_entry["title"] == "Alínea a"
         assert item_entry["title"] == "Item 1"
         assert subsection_entry["children"][1]["title"] == "Art. 2º - Ficam revogadas as disposições em contrário"
+        assert part_entry["level"] == 2
+        assert book_entry["parent_id"] == part_entry["id"]
+        assert item_entry["level"] == 12
+        assert item_entry["parent_id"] == alinea_entry["id"]
 
 
 def test_build_structure_index_keeps_flat_fallback():
@@ -82,6 +87,28 @@ def test_build_structure_index_nests_amended_devices_under_act_article():
         assert amended_children[0]["children"][0]["title"] == "§ 4º"
         assert amended_children[2]["children"][0]["title"] == "Inciso I"
         assert amended_children[2]["children"][0]["children"][0]["title"] == "Alínea j"
+
+
+def test_build_structure_index_closes_embedded_scope_for_new_main_act_articles():
+    blocks, mode = build_blocks_from_page_texts(
+        [
+            "\n".join(AMENDING_SCOPE_SAMPLE_LINES[:8]),
+            "\n".join(AMENDING_SCOPE_SAMPLE_LINES[8:]),
+        ]
+    )
+
+    index_entries = build_structure_index(blocks, document_archetype="legislation_amending_act")
+    article_1_entry = next(entry for entry in index_entries if entry["kind"] == "article" and entry["title"].startswith("Art. 1º"))
+    article_2_entry = next(entry for entry in index_entries if entry["kind"] == "article" and entry["title"].startswith("Art. 2º"))
+    article_3_entry = next(entry for entry in index_entries if entry["kind"] == "article" and entry["title"].startswith("Art. 3º"))
+    section_entry = next(child for child in article_1_entry["children"] if child["kind"] == "section")
+
+    assert mode == "structured_legal"
+    assert section_entry["parent_id"] == article_1_entry["id"]
+    assert section_entry["level"] == 13
+    assert article_2_entry["parent_id"] is None
+    assert article_2_entry["level"] == 8
+    assert article_3_entry["parent_id"] is None
 
 
 def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
@@ -155,6 +182,9 @@ def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
         assert index_entries[0]["source_reference"]
         assert index_entries[0]["position_text"]
         assert index_entries[1]["descendant_count"] > 0
+        assert index_entries[1]["level"] == 2
+        assert index_entries[1]["parent_id"] is None
+        assert index_entries[1]["children"][0]["parent_id"] == index_entries[1]["id"]
         assert index_entries[1]["children"][0]["children"][0]["children"][0]["children"][0]["locator_path"] == "Parte Geral - DAS DISPOSIÇÕES PRELIMINARES > Livro I - DISPOSIÇÕES GERAIS > Título I - DAS NORMAS INICIAIS > Capítulo I - DA ORGANIZAÇÃO > Seção I - Das Regras Básicas"
         assert index_entries[1]["title"] == "Parte Geral - DAS DISPOSIÇÕES PRELIMINARES"
         assert index_entries[1]["children"][0]["children"][0]["children"][0]["children"][0]["title"] == "Seção I - Das Regras Básicas"

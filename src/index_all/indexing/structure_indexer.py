@@ -20,6 +20,19 @@ STRUCTURE_LEVELS = {
     "alinea": 11,
     "item": 12,
 }
+EMBEDDED_AMENDING_LEVELS = {
+    "part": 9,
+    "book": 10,
+    "title": 11,
+    "chapter": 12,
+    "section": 13,
+    "subsection": 14,
+    "article": 15,
+    "legal_paragraph": 16,
+    "inciso": 17,
+    "alinea": 18,
+    "item": 19,
+}
 LEGAL_ARCHETYPES = {"legislation_normative", "legislation_amending_act"}
 NON_HIERARCHICAL_ARCHETYPES = {"spreadsheet_structured", "xml_structured", "financial_statement_ofx"}
 STRUCTURAL_HEADING_KINDS = {"part", "book", "title", "chapter", "section", "subsection"}
@@ -43,6 +56,8 @@ def _make_entry(block: dict, index: int) -> dict:
         "title": _entry_title(block, index),
         "kind": block.get("kind"),
         "locator": block.get("locator", {}),
+        "level": None,
+        "parent_id": None,
         "children": [],
     }
 
@@ -57,16 +72,23 @@ def _append_entry(
     while stack and stack[-1][0] >= level:
         stack.pop()
 
+    entry["level"] = level
     if stack:
+        entry["parent_id"] = stack[-1][1]["id"]
         stack[-1][1]["children"].append(entry)
     else:
+        entry["parent_id"] = None
         hierarchical_entries.append(entry)
 
     stack.append((level, entry))
 
 
 def _build_flat_fallback(blocks: list[dict]) -> list[dict]:
-    return [_make_entry(block, idx) for idx, block in enumerate(blocks, start=1)]
+    entries = [_make_entry(block, idx) for idx, block in enumerate(blocks, start=1)]
+    for entry in entries:
+        entry["level"] = 1
+        entry["parent_id"] = None
+    return entries
 
 
 def _build_normative_index(blocks: list[dict]) -> list[dict]:
@@ -83,6 +105,8 @@ def _build_normative_index(blocks: list[dict]) -> list[dict]:
         structural_count += 1
         entry = _make_entry(block, idx)
         if kind == "preamble":
+            entry["level"] = STRUCTURE_LEVELS["preamble"]
+            entry["parent_id"] = None
             hierarchical_entries.append(entry)
             continue
 
@@ -133,8 +157,8 @@ def _build_amending_act_index(blocks: list[dict]) -> list[dict]:
 
     current_act_article_title: str | None = None
     current_act_article_number: int | None = None
-    current_embedded_article_title: str | None = None
     amendment_context_active = False
+    embedded_scope_active = False
 
     for idx, block in enumerate(blocks, start=1):
         kind = block.get("kind")
@@ -146,18 +170,20 @@ def _build_amending_act_index(blocks: list[dict]) -> list[dict]:
         entry = _make_entry(block, idx)
 
         if kind == "preamble":
+            entry["level"] = STRUCTURE_LEVELS["preamble"]
+            entry["parent_id"] = None
             hierarchical_entries.append(entry)
             current_act_article_title = None
             current_act_article_number = None
-            current_embedded_article_title = None
             amendment_context_active = False
+            embedded_scope_active = False
             continue
 
-        if kind in STRUCTURAL_HEADING_KINDS:
+        if kind in STRUCTURAL_HEADING_KINDS and not amendment_context_active:
             current_act_article_title = None
             current_act_article_number = None
-            current_embedded_article_title = None
             amendment_context_active = False
+            embedded_scope_active = False
             _append_entry(hierarchical_entries, stack, entry, level=base_level)
             continue
 
@@ -167,27 +193,39 @@ def _build_amending_act_index(blocks: list[dict]) -> list[dict]:
                 current_act_article_number=current_act_article_number,
                 amendment_context_active=amendment_context_active,
             )
-            effective_level = base_level + 1 if is_embedded_article else base_level
+            effective_level = EMBEDDED_AMENDING_LEVELS["article"] if is_embedded_article else base_level
             _append_entry(hierarchical_entries, stack, entry, level=effective_level)
 
             if is_embedded_article:
-                current_embedded_article_title = block.get("title")
+                embedded_scope_active = True
                 continue
 
             current_act_article_title = block.get("title")
             current_act_article_number = _extract_article_number(block)
-            current_embedded_article_title = None
             amendment_context_active = _block_opens_amendment_context(block)
+            embedded_scope_active = False
             continue
 
         effective_level = base_level
         locator_article = (block.get("locator") or {}).get("article")
-        if current_embedded_article_title and locator_article == current_embedded_article_title:
-            effective_level = base_level + 1
+        is_embedded_child = False
+        if amendment_context_active and current_act_article_title:
+            if kind in STRUCTURAL_HEADING_KINDS:
+                is_embedded_child = True
+            elif locator_article and locator_article != current_act_article_title:
+                is_embedded_child = True
+            elif embedded_scope_active:
+                is_embedded_child = True
+
+        if is_embedded_child:
+            effective_level = EMBEDDED_AMENDING_LEVELS.get(kind, base_level)
 
         _append_entry(hierarchical_entries, stack, entry, level=effective_level)
 
-        if current_act_article_title and current_embedded_article_title is None and _block_opens_amendment_context(block):
+        if kind in STRUCTURAL_HEADING_KINDS and is_embedded_child:
+            embedded_scope_active = True
+
+        if current_act_article_title and not embedded_scope_active and _block_opens_amendment_context(block):
             amendment_context_active = True
 
     if structural_count:

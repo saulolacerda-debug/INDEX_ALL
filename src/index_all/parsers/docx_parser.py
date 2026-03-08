@@ -24,6 +24,8 @@ from index_all.parsers.legal_structure import (
     update_context,
 )
 
+MANUAL_TITLE_HINTS = ("manual", "procedimento", "passo a passo", "guia")
+
 
 def _iter_block_items(document: DocxDocument) -> Iterator[Paragraph | Table]:
     for child in document.element.body.iterchildren():
@@ -63,6 +65,11 @@ def _sort_blocks_in_document_order(blocks: list[dict]) -> list[dict]:
     return sorted(blocks, key=order_key)
 
 
+def _should_prefer_manual(paragraph_texts: list[str]) -> bool:
+    early_text = " ".join(normalize_text(text).lower() for text in paragraph_texts[:10])
+    return any(hint in early_text for hint in MANUAL_TITLE_HINTS)
+
+
 def parse_docx(path: Path) -> dict:
     document = Document(str(path))
     items = list(_iter_block_items(document))
@@ -71,8 +78,10 @@ def parse_docx(path: Path) -> dict:
         for item in items
         if isinstance(item, Paragraph) and normalize_text(item.text or "")
     ]
+    is_manual_document = looks_like_manual_document(paragraph_texts)
     is_legal_document = looks_like_legal_document(paragraph_texts)
-    is_manual_document = not is_legal_document and looks_like_manual_document(paragraph_texts)
+    if is_manual_document and is_legal_document and _should_prefer_manual(paragraph_texts):
+        is_legal_document = False
 
     paragraph_count = 0
     table_count = 0
