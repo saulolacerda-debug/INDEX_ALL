@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from typing import Sequence
@@ -90,6 +91,39 @@ LEGAL_DOCUMENT_TITLE_RE = re.compile(
     r"^(?:LEI(?:\s+COMPLEMENTAR)?|DECRETO(?:-LEI)?|EMENDA\s+CONSTITUCIONAL|CONSTITUIÇÃO|MEDIDA\s+PROVISÓRIA|PORTARIA|RESOLUÇÃO|INSTRUÇÃO\s+NORMATIVA|CÓDIGO)\b",
     re.IGNORECASE,
 )
+NUMBERED_SECTION_RE = re.compile(r"^(?P<number>\d+(?:\.\d+){0,4})(?:\.)?\s+(?P<title>.+)$")
+STEP_HEADING_RE = re.compile(
+    r"^(?P<label>ETAPA|PASSO|FASE)\s+(?P<identifier>[0-9IVXLCDM]+)\b(?:\s*[-–:]\s*(?P<title>.+))?$",
+    re.IGNORECASE,
+)
+
+MANUAL_MARKER_TITLES = {
+    "escopo",
+    "etapa",
+    "etapas",
+    "finalidade",
+    "fluxo",
+    "introducao",
+    "objetivo",
+    "objetivos",
+    "passo a passo",
+    "passos",
+    "procedimento",
+    "procedimentos",
+    "resumo",
+    "visao geral",
+}
+AMENDMENT_CONTEXT_HINTS = (
+    "acrescenta",
+    "altera",
+    "com a seguinte redacao",
+    "com as seguintes alteracoes",
+    "da nova redacao",
+    "fica acrescido",
+    "passa a vigorar com",
+    "passam a vigorar com",
+    "renumera",
+)
 
 
 @dataclass(frozen=True)
@@ -99,6 +133,7 @@ class Classification:
     label: str | None = None
     locator_key: str | None = None
     heading_level: int | None = None
+    group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -115,6 +150,11 @@ def new_structure_context() -> dict[str, str | None]:
 
 def normalize_text(text: str) -> str:
     return " ".join(text.replace("\xa0", " ").split())
+
+
+def fold_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", normalize_text(text).lower())
+    return "".join(character for character in normalized if not unicodedata.combining(character))
 
 
 def clean_label_text(text: str) -> str:
@@ -177,6 +217,108 @@ def _normalize_heading_identifier(identifier: str) -> str:
         else:
             parts.append(part.capitalize())
     return " ".join(parts)
+
+
+def text_starts_with_quote(text: str) -> bool:
+    stripped = str(text or "").lstrip()
+    return bool(stripped) and stripped[0] in {'"', "“", "”"}
+
+
+def text_indicates_amendment_context(text: str) -> bool:
+    folded = fold_text(text)
+    return any(hint in folded for hint in AMENDMENT_CONTEXT_HINTS)
+
+
+def _is_manual_marker_heading(text: str) -> bool:
+    marker = fold_text(text).strip(" :-–.;")
+    return marker in MANUAL_MARKER_TITLES
+
+
+def _looks_like_short_manual_heading(text: str) -> bool:
+    cleaned = clean_label_text(text).strip(":-–")
+    if not cleaned or len(cleaned) > 80 or cleaned.endswith((".", ";")):
+        return False
+    if classify_normative_text(cleaned):
+        return False
+
+    words = [word for word in cleaned.split() if any(character.isalpha() for character in word)]
+    if not 2 <= len(words) <= 8:
+        return False
+
+    title_case_words = sum(
+        1
+        for word in words
+        if word[0].isupper() and not word.isupper()
+    )
+    return title_case_words >= max(2, len(words) - 1)
+
+
+def _is_all_caps_heading(text: str) -> bool:
+    cleaned = clean_label_text(text).strip(":-–")
+    if not cleaned or len(cleaned) > 96 or cleaned.endswith((".", ";")):
+        return False
+    if classify_normative_text(cleaned):
+        return False
+
+    letters = [character for character in cleaned if character.isalpha()]
+    if len(letters) < 4:
+        return False
+
+    uppercase_ratio = sum(character.isupper() for character in letters) / len(letters)
+    return uppercase_ratio >= 0.72
+
+
+def _looks_like_numbered_manual_heading(text: str) -> re.Match[str] | None:
+    match = NUMBERED_SECTION_RE.match(clean_label_text(text))
+    if not match:
+        return None
+
+    title = normalize_text(match.group("title"))
+    number = match.group("number")
+    if not title or len(title) > 96:
+        return None
+    if title.endswith((".", ";")) and "." not in number:
+        return None
+    if title and title[0].islower():
+        return None
+    return match
+
+
+def _resolve_manual_heading_level(
+    group: str,
+    context: dict[str, int | str | None] | None,
+    *,
+    explicit_level: int | None = None,
+) -> int:
+    if explicit_level is not None:
+        return max(1, min(explicit_level, 6))
+
+    last_level = context.get("last_heading_level") if context else None
+    last_group = context.get("last_heading_group") if context else None
+
+    if not isinstance(last_level, int):
+        return 1
+
+    if group == "marker":
+        if last_group == "marker":
+            return last_level
+        if last_group == "step":
+            return max(last_level - 1, 2)
+        return min(last_level + 1, 6)
+
+    if group == "step":
+        if last_group == "step":
+            return last_level
+        return min(last_level + 1, 6)
+
+    if group == "primary_heading":
+        if last_group in {"marker", "step"}:
+            return max(last_level - 1, 1)
+        if last_level == 1:
+            return 2
+        return last_level
+
+    return last_level
 
 
 def _looks_like_heading_continuation(text: str | None) -> bool:
@@ -310,6 +452,72 @@ def classify_paragraph(
     return Classification(kind="paragraph", title=make_preview_title(text))
 
 
+def classify_manual_text(
+    text: str,
+    *,
+    style_name: str | None = None,
+    context: dict[str, int | str | None] | None = None,
+) -> Classification:
+    cleaned = clean_label_text(text)
+    if not cleaned:
+        return Classification(kind="paragraph", title=None, group="body")
+
+    heading_level = extract_heading_level(style_name)
+    if heading_level is not None:
+        return Classification(
+            kind="heading",
+            title=make_preview_title(cleaned, max_length=120),
+            heading_level=_resolve_manual_heading_level("styled_heading", context, explicit_level=heading_level),
+            group="styled_heading",
+        )
+
+    numbered_match = _looks_like_numbered_manual_heading(cleaned)
+    if numbered_match:
+        level = numbered_match.group("number").count(".") + 1
+        return Classification(
+            kind="heading",
+            title=normalize_text(cleaned),
+            label=numbered_match.group("number"),
+            heading_level=_resolve_manual_heading_level("numbered_heading", context, explicit_level=level),
+            group="numbered_heading",
+        )
+
+    step_match = STEP_HEADING_RE.match(cleaned)
+    if step_match:
+        label = normalize_text(step_match.group("label")).capitalize()
+        identifier = step_match.group("identifier").upper()
+        remainder = normalize_text(step_match.group("title") or "")
+        title = f"{label} {identifier}"
+        if remainder:
+            title = f"{title} - {remainder}"
+        return Classification(
+            kind="heading",
+            title=title,
+            label=title,
+            heading_level=_resolve_manual_heading_level("step", context),
+            group="step",
+        )
+
+    if _is_manual_marker_heading(cleaned):
+        return Classification(
+            kind="heading",
+            title=normalize_text(cleaned.rstrip(":")),
+            label=normalize_text(cleaned.rstrip(":")),
+            heading_level=_resolve_manual_heading_level("marker", context),
+            group="marker",
+        )
+
+    if _is_all_caps_heading(cleaned) or _looks_like_short_manual_heading(cleaned):
+        return Classification(
+            kind="heading",
+            title=make_preview_title(cleaned, max_length=120),
+            heading_level=_resolve_manual_heading_level("primary_heading", context),
+            group="primary_heading",
+        )
+
+    return Classification(kind="paragraph", title=make_preview_title(cleaned), group="body")
+
+
 def update_context(context: dict[str, str | None], classification: Classification) -> None:
     if not classification.locator_key or not classification.title:
         return
@@ -370,8 +578,135 @@ def looks_like_legal_document(texts: Sequence[str]) -> bool:
     return False
 
 
+def looks_like_manual_document(texts: Sequence[str]) -> bool:
+    manual_hits = 0
+    structure_hits = 0
+
+    for text in texts:
+        cleaned = clean_label_text(text)
+        if not cleaned or classify_normative_text(cleaned):
+            continue
+
+        if "manual" in fold_text(cleaned) and len(cleaned.split()) <= 8:
+            manual_hits += 1
+            continue
+
+        if _is_manual_marker_heading(cleaned):
+            manual_hits += 1
+            continue
+
+        if STEP_HEADING_RE.match(cleaned):
+            structure_hits += 1
+            continue
+
+        if _looks_like_numbered_manual_heading(cleaned):
+            structure_hits += 1
+            continue
+
+        if _is_all_caps_heading(cleaned) or _looks_like_short_manual_heading(cleaned):
+            structure_hits += 1
+
+    if manual_hits >= 2:
+        return True
+    if manual_hits >= 1 and structure_hits >= 2:
+        return True
+    if structure_hits >= 4:
+        return True
+    return False
+
+
 def _resolved_line_end(locator: dict) -> int | None:
     return locator.get("line_end") if locator.get("line_end") is not None else locator.get("line_start")
+
+
+def build_manual_blocks(records: Sequence[StructuredTextRecord]) -> list[dict]:
+    normalized_records = [
+        StructuredTextRecord(
+            text=normalize_text(record.text or ""),
+            locator=dict(record.locator or {}),
+            extra=dict(record.extra or {}),
+            style_name=record.style_name,
+        )
+        for record in records
+        if normalize_text(record.text or "")
+    ]
+
+    blocks: list[dict] = []
+    block_idx = 1
+    context: dict[str, int | str | None] = {
+        "last_heading_level": None,
+        "last_heading_group": None,
+    }
+    paragraph_buffer: list[StructuredTextRecord] = []
+
+    def flush_paragraph_buffer() -> None:
+        nonlocal block_idx, paragraph_buffer
+
+        if not paragraph_buffer:
+            return
+
+        merged_text = normalize_text(" ".join(record.text for record in paragraph_buffer))
+        if not merged_text:
+            paragraph_buffer = []
+            return
+
+        first_record = paragraph_buffer[0]
+        last_record = paragraph_buffer[-1]
+        extra = dict(first_record.extra)
+        if len(paragraph_buffer) > 1:
+            extra["segment_count"] = len(paragraph_buffer)
+
+        blocks.append(
+            {
+                "id": f"block_{block_idx:04d}",
+                "kind": "paragraph",
+                "title": make_preview_title(merged_text),
+                "text": merged_text,
+                "locator": {
+                    "page": first_record.locator.get("page"),
+                    "sheet": first_record.locator.get("sheet"),
+                    "line_start": first_record.locator.get("line_start"),
+                    "line_end": _resolved_line_end(last_record.locator),
+                },
+                "extra": extra,
+            }
+        )
+        block_idx += 1
+        paragraph_buffer = []
+
+    for record in normalized_records:
+        classification = classify_manual_text(record.text, style_name=record.style_name, context=context)
+
+        if classification.kind == "heading":
+            flush_paragraph_buffer()
+
+            extra = dict(record.extra)
+            if classification.heading_level is not None:
+                extra["heading_level"] = classification.heading_level
+            if classification.group:
+                extra["heading_group"] = classification.group
+            if classification.label:
+                extra["label"] = classification.label
+
+            blocks.append(
+                {
+                    "id": f"block_{block_idx:04d}",
+                    "kind": "heading",
+                    "title": classification.title,
+                    "text": record.text,
+                    "locator": dict(record.locator),
+                    "extra": extra,
+                }
+            )
+            block_idx += 1
+            context["last_heading_level"] = classification.heading_level
+            context["last_heading_group"] = classification.group
+            continue
+
+        paragraph_buffer.append(record)
+
+    flush_paragraph_buffer()
+    return blocks
 
 
 def build_legal_blocks(records: Sequence[StructuredTextRecord]) -> list[dict]:
@@ -435,6 +770,10 @@ def build_legal_blocks(records: Sequence[StructuredTextRecord]) -> list[dict]:
             extra["heading_level"] = classification.heading_level
         if len(buffered_records) > 1:
             extra["segment_count"] = len(buffered_records)
+        if text_indicates_amendment_context(merged_text):
+            extra["amendment_context"] = True
+        if text_starts_with_quote(first_record.text):
+            extra["starts_with_quote"] = True
         if classification.kind == "article":
             article_summary = summarize_article_text(merged_text)
             if article_summary:

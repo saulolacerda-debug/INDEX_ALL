@@ -9,7 +9,9 @@ from pypdf import PdfReader
 from index_all.parsers.legal_structure import (
     StructuredTextRecord,
     build_legal_blocks,
+    build_manual_blocks,
     looks_like_legal_document,
+    looks_like_manual_document,
     normalize_text,
 )
 
@@ -77,9 +79,12 @@ def _build_page_blocks(page_texts: list[str]) -> list[dict]:
 
 def build_blocks_from_page_texts(page_texts: list[str]) -> tuple[list[dict], str]:
     records = _extract_records(page_texts)
-    if not looks_like_legal_document([record.text for record in records]):
-        return _build_page_blocks(page_texts), "page_text"
-    return build_legal_blocks(records), "structured_legal"
+    record_texts = [record.text for record in records]
+    if looks_like_legal_document(record_texts):
+        return build_legal_blocks(records), "structured_legal"
+    if looks_like_manual_document(record_texts):
+        return build_manual_blocks(records), "structured_manual"
+    return _build_page_blocks(page_texts), "page_text"
 
 
 def parse_pdf(path: Path) -> dict:

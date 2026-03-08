@@ -6,7 +6,7 @@ from index_all.indexing.structure_indexer import build_structure_index
 from index_all.main import iter_supported_files, process_file
 from index_all.parsers.docx_parser import parse_docx
 
-from tests.helpers import create_legal_docx, workspace_test_dir
+from tests.helpers import create_amending_docx, create_legal_docx, create_manual_docx, workspace_test_dir
 
 
 def test_build_structure_index_creates_full_legal_hierarchy():
@@ -59,6 +59,29 @@ def test_build_structure_index_keeps_flat_fallback():
     assert len(result) == 1
     assert result[0]["title"] == "Item 1"
     assert result[0]["children"] == []
+
+
+def test_build_structure_index_nests_amended_devices_under_act_article():
+    with workspace_test_dir() as temp_dir:
+        docx_path = create_amending_docx(temp_dir / "ec_132.docx")
+        blocks = parse_docx(docx_path)["content"]["blocks"]
+
+        index_entries = build_structure_index(blocks, document_archetype="legislation_amending_act")
+
+        article_1_entry = next(entry for entry in index_entries if entry["kind"] == "article" and entry["title"].startswith("Art. 1º"))
+        article_2_entry = next(entry for entry in index_entries if entry["kind"] == "article" and entry["title"].startswith("Art. 2º"))
+
+        amended_children = [child for child in article_1_entry["children"] if child["kind"] == "article"]
+        assert [child["title"] for child in amended_children] == [
+            "Art. 43 - Compete à lei complementar disciplinar aspectos gerais do sistema",
+            "Art. 50 - O Congresso Nacional e suas Casas terão competência para fiscalizar a execução",
+            "Art. 105 - Compete ao Superior Tribunal de Justiça",
+        ]
+        assert article_2_entry["title"] == "Art. 2º - Esta Emenda Constitucional entra em vigor na data de sua publicação"
+        assert all(not entry["title"].startswith("Art. 43") for entry in index_entries)
+        assert amended_children[0]["children"][0]["title"] == "§ 4º"
+        assert amended_children[2]["children"][0]["title"] == "Inciso I"
+        assert amended_children[2]["children"][0]["children"][0]["title"] == "Alínea j"
 
 
 def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
@@ -189,3 +212,29 @@ def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
         assert "## Índice Hierárquico Completo" in ai_context_markdown
         assert "## Blocos Estruturados" in ai_context_markdown
         assert "[block_0008] Art. 1º - Esta lei estabelece normas gerais" in ai_context_markdown
+
+
+def test_pipeline_writes_manual_procedural_tree_without_page_backbone():
+    with workspace_test_dir() as temp_root:
+        source_dir = temp_root / "entrada"
+        source_dir.mkdir()
+        create_manual_docx(source_dir / "manual_operacional.docx")
+
+        output_dir = process_file(source_dir / "manual_operacional.docx", temp_root / "saida")
+
+        content_payload = json.loads((output_dir / "content.json").read_text(encoding="utf-8"))
+        summary_text = (output_dir / "summary.md").read_text(encoding="utf-8")
+        report_html = (output_dir / "report.html").read_text(encoding="utf-8")
+
+        assert content_payload["document_archetype"] == "manual_procedural"
+        assert content_payload["document_profile"]["primary_structure"] == "structured_manual"
+        assert content_payload["index"][0]["title"] == "MANUAL OPERACIONAL DE APURAÇÃO"
+        assert content_payload["index"][0]["children"][0]["title"] == "Primeiros Passos"
+        assert content_payload["index"][0]["children"][0]["children"][0]["title"] == "Objetivos"
+        assert content_payload["index"][0]["children"][0]["children"][1]["title"] == "Procedimento"
+        assert content_payload["index"][0]["children"][0]["children"][1]["children"][0]["title"] == "Etapa 1 - Receber arquivo"
+        assert "- [heading] MANUAL OPERACIONAL DE APURAÇÃO" in summary_text
+        assert "- [heading] Primeiros Passos" in summary_text
+        assert "Page 1" not in summary_text
+        assert "Page 1" not in report_html
+        assert "índice procedural por títulos, seções e etapas internas" in report_html

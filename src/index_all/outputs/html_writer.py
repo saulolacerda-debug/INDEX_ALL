@@ -1017,9 +1017,15 @@ def _build_html(payload: dict) -> str:
     }}
 
     function renderHero() {{
+      const archetype = data.document_profile && data.document_profile.document_archetype;
+      const subtitles = {{
+        legislation_normative: "Relatório navegável com hierarquia normativa completa do documento.",
+        legislation_amending_act: "Relatório navegável com separação entre dispositivo alterador e dispositivos alterados.",
+        manual_procedural: "Relatório navegável com índice procedural por títulos, seções e etapas internas.",
+      }};
       document.getElementById("hero-title").textContent = data.metadata.file_name || "Arquivo";
       document.getElementById("hero-subtitle").textContent =
-        "Relatório navegável gerado a partir dos artefatos estruturados do INDEX_ALL.";
+        subtitles[archetype] || "Relatório navegável gerado a partir dos artefatos estruturados do INDEX_ALL.";
 
       const heroMeta = document.getElementById("hero-meta");
       heroMeta.innerHTML = "";

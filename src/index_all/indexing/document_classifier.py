@@ -158,6 +158,9 @@ def classify_document_archetype(
             return "legislation_amending_act"
         return "legislation_normative"
 
+    if parser_mode == "structured_manual":
+        return "manual_procedural"
+
     if (
         file_type in {"csv", "xlsx"}
         or parser_mode in {"table_preview", "sheet_preview"}

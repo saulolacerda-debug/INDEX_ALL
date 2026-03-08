@@ -14,9 +14,11 @@ from docx.text.paragraph import Paragraph
 from index_all.parsers.legal_structure import (
     StructuredTextRecord,
     build_legal_blocks,
+    build_manual_blocks,
     build_locator,
     classify_paragraph,
     looks_like_legal_document,
+    looks_like_manual_document,
     new_structure_context,
     normalize_text,
     update_context,
@@ -70,11 +72,12 @@ def parse_docx(path: Path) -> dict:
         if isinstance(item, Paragraph) and normalize_text(item.text or "")
     ]
     is_legal_document = looks_like_legal_document(paragraph_texts)
+    is_manual_document = not is_legal_document and looks_like_manual_document(paragraph_texts)
 
     paragraph_count = 0
     table_count = 0
 
-    if is_legal_document:
+    if is_legal_document or is_manual_document:
         records: list[StructuredTextRecord] = []
         trailing_table_blocks: list[dict] = []
 
@@ -98,7 +101,12 @@ def parse_docx(path: Path) -> dict:
             table_count += 1
             trailing_table_blocks.append(_build_table_block(item, position, table_count))
 
-        blocks = build_legal_blocks(records)
+        if is_legal_document:
+            blocks = build_legal_blocks(records)
+            mode = "structured_legal"
+        else:
+            blocks = build_manual_blocks(records)
+            mode = "structured_manual"
         blocks = _sort_blocks_in_document_order(blocks + trailing_table_blocks)
         blocks = _assign_block_ids(blocks)
     else:
@@ -154,6 +162,7 @@ def parse_docx(path: Path) -> dict:
             block_idx += 1
 
         blocks = _assign_block_ids(blocks)
+        mode = "document_blocks"
 
     return {
         "content": {
@@ -162,7 +171,7 @@ def parse_docx(path: Path) -> dict:
                 "paragraph_count": paragraph_count,
                 "table_count": table_count,
                 "block_count": len(blocks),
-                "mode": "structured_legal" if is_legal_document else "document_blocks",
+                "mode": mode,
                 "kind_counts": dict(sorted(Counter(block["kind"] for block in blocks).items())),
             },
         }

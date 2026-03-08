@@ -16,6 +16,7 @@ STRUCTURE_LABELS = {
     "inciso": "inciso(s)",
     "alinea": "alínea(s)",
     "item": "item(ns)",
+    "heading": "cabeçalho(s)",
 }
 
 
@@ -62,6 +63,14 @@ def _render_outline(entries: list[dict], depth: int = 0, limit: int = 10) -> lis
     return lines
 
 
+def _flatten_index_count(entries: list[dict]) -> int:
+    count = 0
+    for entry in entries:
+        count += 1
+        count += _flatten_index_count(entry.get("children") or [])
+    return count
+
+
 def build_summary(metadata: dict, blocks: list[dict], index_entries: list[dict] | None = None) -> str:
     preview_texts = []
     ordered_blocks = [block for block in blocks if block.get("kind") != "table"]
@@ -85,6 +94,7 @@ def build_summary(metadata: dict, blocks: list[dict], index_entries: list[dict] 
         sections.append(f"Estrutura identificada: {structure_counts}.")
 
     if index_entries:
+        sections.append(f"Índice hierárquico com {_flatten_index_count(index_entries)} entrada(s) navegáveis.")
         outline_lines = _render_outline(index_entries)
         if outline_lines:
             sections.append("Primeiros itens do índice:\n\n" + "\n".join(outline_lines))
