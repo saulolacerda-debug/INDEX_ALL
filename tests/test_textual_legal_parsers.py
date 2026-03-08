@@ -36,7 +36,7 @@ def test_textual_parsers_detect_legal_hierarchy_across_extensions(creator, parse
         result = parser(file_path)
         blocks = result["content"]["blocks"]
         parser_metadata = result["content"]["parser_metadata"]
-        index_entries = build_structure_index(blocks)
+        index_entries = build_structure_index(blocks, document_archetype="legislation_normative")
 
         assert parser_metadata["mode"] == "structured_legal"
         assert blocks[0]["kind"] == "preamble"

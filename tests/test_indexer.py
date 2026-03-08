@@ -14,7 +14,7 @@ def test_build_structure_index_creates_full_legal_hierarchy():
         docx_path = create_legal_docx(temp_dir / "norma.docx")
         blocks = parse_docx(docx_path)["content"]["blocks"]
 
-        index_entries = build_structure_index(blocks)
+        index_entries = build_structure_index(blocks, document_archetype="legislation_normative")
 
         assert [entry["title"] for entry in index_entries[:2]] == ["Preâmbulo", "Parte Geral - DAS DISPOSIÇÕES PRELIMINARES"]
 
@@ -54,7 +54,7 @@ def test_build_structure_index_keeps_flat_fallback():
         }
     ]
 
-    result = build_structure_index(blocks)
+    result = build_structure_index(blocks, document_archetype="generic_document")
 
     assert len(result) == 1
     assert result[0]["title"] == "Item 1"
@@ -85,7 +85,9 @@ def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
 
         assert metadata_payload["file_name"] == "norma.docx"
         assert metadata_payload["artifact_role"] == "document_manifest"
+        assert metadata_payload["document_archetype"] == "legislation_normative"
         assert metadata_payload["document_profile"]["domain"] == "legal_normative"
+        assert metadata_payload["document_profile"]["document_archetype"] == "legislation_normative"
         assert metadata_payload["consultation_hints"]["preferred_artifact_for_grounding"] == "ai_context.json"
         assert metadata_payload["consultation_hints"]["preferred_markdown_artifact_for_upload"] == "ai_context.md"
         assert metadata_payload["consultation_hints"]["compact_grounding_artifact"] == "content.json"
@@ -97,7 +99,9 @@ def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
         assert metadata_payload["ai_ready"]["preferred_markdown_artifact_for_upload"] == "ai_context.md"
 
         assert content_payload["metadata"]["file_name"] == "norma.docx"
+        assert content_payload["document_archetype"] == "legislation_normative"
         assert content_payload["document_profile"]["domain"] == "legal_normative"
+        assert content_payload["document_profile"]["document_archetype"] == "legislation_normative"
         assert content_payload["document_profile"]["primary_structure"] == "structured_legal"
         assert content_payload["ai_ready"]["single_file_ready"] is True
         assert content_payload["ai_ready"]["preferred_upload_unit"] is False
@@ -111,7 +115,9 @@ def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
 
         assert ai_context_payload["artifact_role"] == "ai_context_bundle"
         assert ai_context_payload["schema_version"] == "1.0"
+        assert ai_context_payload["document_archetype"] == "legislation_normative"
         assert ai_context_payload["document_profile"]["domain"] == "legal_normative"
+        assert ai_context_payload["document_profile"]["document_archetype"] == "legislation_normative"
         assert ai_context_payload["metadata"]["artifact_role"] == "document_manifest"
         assert ai_context_payload["consultation_hints"]["preferred_artifact_for_grounding"] == "ai_context.json"
         assert ai_context_payload["ai_ready"]["single_file_ready"] is True
@@ -122,6 +128,7 @@ def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
 
         assert index_entries[0]["title"] == "Preâmbulo"
         assert index_entries[0]["document_context"]["domain"] == "legal_normative"
+        assert index_entries[0]["document_context"]["document_archetype"] == "legislation_normative"
         assert index_entries[0]["source_reference"]
         assert index_entries[0]["position_text"]
         assert index_entries[1]["descendant_count"] > 0
@@ -130,6 +137,7 @@ def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
         assert index_entries[1]["children"][0]["children"][0]["children"][0]["children"][0]["title"] == "Seção I - Das Regras Básicas"
         assert "## Como Usar Com IA" in summary_text
         assert "## Perfil Do Documento" in summary_text
+        assert "- Arquétipo documental: `legislation_normative`" in summary_text
         assert "## Índice Hierárquico Completo" in summary_text
         assert "## Blocos Estruturados" in summary_text
         assert "ai_context.json" in summary_text
@@ -173,6 +181,7 @@ def test_pipeline_ignores_helper_files_and_writes_hierarchical_summary():
         assert "#CBD5E1" in report_html
 
         assert "# AI Context - norma.docx" in ai_context_markdown
+        assert "- Arquétipo documental: `legislation_normative`" in ai_context_markdown
         assert "upload em IA quando o modelo responder melhor a Markdown" in ai_context_markdown
         assert "- Artefato preferencial para upload textual: `ai_context.md`" in ai_context_markdown
         assert "- Artefato preferencial para upload JSON: `ai_context.json`" in ai_context_markdown

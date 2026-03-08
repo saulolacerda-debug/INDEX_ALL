@@ -165,6 +165,7 @@ def _build_payload(metadata: dict, content: dict, index_entries: list[dict], sum
     blocks = _build_block_payload(content.get("blocks", []))
     return {
         "metadata": metadata,
+        "document_profile": content.get("document_profile", {}),
         "parser_metadata": content.get("parser_metadata", {}),
         "summary": summary,
         "stats": _build_stats(blocks, index_entries),
@@ -1025,6 +1026,9 @@ def _build_html(payload: dict) -> str:
 
       const pills = [
         data.metadata.file_type ? "Tipo: " + data.metadata.file_type : null,
+        data.document_profile && data.document_profile.document_archetype
+          ? "Arquétipo: " + data.document_profile.document_archetype
+          : null,
         "Blocos: " + data.stats.block_count,
         "Entradas no índice: " + data.stats.index_entry_count,
       ].filter(Boolean);
@@ -1067,6 +1071,9 @@ def _build_html(payload: dict) -> str:
       const items = [
         ["Nome", data.metadata.file_name],
         ["Tipo", data.metadata.file_type],
+        ["Arquétipo documental", data.document_profile && data.document_profile.document_archetype],
+        ["Domínio", data.document_profile && data.document_profile.domain],
+        ["Estrutura principal", data.document_profile && data.document_profile.primary_structure],
         ["Tamanho", data.metadata.file_size_bytes != null ? data.metadata.file_size_bytes + " bytes" : null],
         ["Modificado em", data.metadata.modified_at],
         ["Origem", data.metadata.source_path],
