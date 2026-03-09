@@ -41,6 +41,24 @@ def _append_block(lines: list[str], block: dict) -> None:
     lines.extend(["", "Texto fonte:", "", "```text", text, "```", "", "---", ""])
 
 
+def _append_catalog(lines: list[str], catalog_entries: list[dict]) -> None:
+    if not catalog_entries:
+        lines.extend(["- Sem arquivos catalogados.", ""])
+        return
+
+    for entry in catalog_entries:
+        lines.append(
+            f"- `{entry.get('file_name')}` | tipo `{entry.get('file_type')}` | "
+            f"arquétipo `{entry.get('document_archetype')}` | blocos `{entry.get('block_count', 0)}`"
+        )
+        top_titles = entry.get("top_index_titles", []) or []
+        if top_titles:
+            lines.append(f"  Principais entradas: {' | '.join(top_titles[:6])}")
+        if entry.get("output_dir"):
+            lines.append(f"  Output: `{entry['output_dir']}`")
+    lines.append("")
+
+
 def write_ai_context_markdown(path: Path, ai_context_payload: dict) -> None:
     metadata = ai_context_payload.get("metadata", {})
     document_profile = ai_context_payload.get("document_profile", {})
@@ -184,5 +202,68 @@ def write_summary_markdown(path: Path, consultation_payload: dict) -> None:
     lines.extend(["## Blocos Estruturados", ""])
     for block in blocks:
         _append_block(lines, block)
+
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_collection_summary_markdown(path: Path, collection_payload: dict) -> None:
+    metadata = collection_payload.get("metadata", {})
+    catalog = collection_payload.get("catalog", [])
+    master_index = collection_payload.get("master_index", [])
+    summary = collection_payload.get("summary", "")
+
+    lines = [
+        f"# Coleção - {metadata.get('collection_name', 'Acervo')}",
+        "",
+        "> Artefato consolidado do lote processado pelo INDEX_ALL.",
+        "",
+        "## Metadados Agregados",
+        "",
+        f"- Nome da coleção: `{metadata.get('collection_name', '')}`",
+        f"- Origem: `{metadata.get('source_path', '')}`",
+        f"- Arquivos: `{metadata.get('file_count', 0)}`",
+        f"- Blocos totais: `{metadata.get('total_block_count', 0)}`",
+        f"- Entradas no índice mestre: `{metadata.get('master_index_entry_count', 0)}`",
+        "",
+    ]
+
+    file_type_counts = metadata.get("file_type_counts", {})
+    if file_type_counts:
+        lines.extend(["## Arquivos Por Tipo", ""])
+        lines.extend(f"- `{file_type}`: `{count}`" for file_type, count in file_type_counts.items())
+        lines.append("")
+
+    archetype_counts = metadata.get("document_archetype_counts", {})
+    if archetype_counts:
+        lines.extend(["## Arquivos Por Arquétipo", ""])
+        lines.extend(f"- `{archetype}`: `{count}`" for archetype, count in archetype_counts.items())
+        lines.append("")
+
+    _append_list_section(
+        lines,
+        "## Principais Títulos Encontrados",
+        [f"`{title}`" for title in metadata.get("top_titles", [])],
+    )
+    _append_list_section(
+        lines,
+        "## Arquivos Com Estrutura Normativa",
+        [f"`{name}`" for name in metadata.get("files_with_normative_structure", [])],
+    )
+    _append_list_section(
+        lines,
+        "## Arquivos Com Estrutura Procedural",
+        [f"`{name}`" for name in metadata.get("files_with_procedural_structure", [])],
+    )
+
+    lines.extend(["## Resumo Consolidado", "", summary or "Sem resumo consolidado disponível.", ""])
+    lines.extend(["## Catálogo Do Acervo", ""])
+    _append_catalog(lines, list(catalog))
+
+    lines.extend(["## Índice Mestre", ""])
+    if master_index:
+        _append_index_entries(lines, list(master_index))
+    else:
+        lines.append("- Sem entradas no índice mestre.")
+        lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")

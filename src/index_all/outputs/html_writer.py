@@ -1511,3 +1511,226 @@ def write_report_html(
 ) -> None:
     payload = _build_payload(metadata, content, index_entries, summary)
     path.write_text(_build_html(payload), encoding="utf-8")
+
+
+def _collection_escape_html(value: object) -> str:
+    text = str(value or "")
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _render_collection_tree(entries: list[dict]) -> str:
+    if not entries:
+        return "<p class=\"empty-state\">Sem entradas no índice mestre.</p>"
+
+    def render_nodes(nodes: list[dict]) -> str:
+        parts = ["<ul class=\"collection-tree\">"]
+        for node in nodes:
+            kind = _collection_escape_html(node.get("kind") or "entry")
+            title = _collection_escape_html(node.get("title") or "Sem título")
+            meta_bits = []
+            if node.get("document_archetype"):
+                meta_bits.append(f"arquétipo {_collection_escape_html(node['document_archetype'])}")
+            if node.get("file_type"):
+                meta_bits.append(f"tipo {_collection_escape_html(node['file_type'])}")
+            if node.get("output_dir"):
+                meta_bits.append(f"output {_collection_escape_html(node['output_dir'])}")
+            meta_html = f"<div class=\"collection-node-meta\">{' | '.join(meta_bits)}</div>" if meta_bits else ""
+            children = node.get("children") or []
+            children_html = render_nodes(children) if children else ""
+            parts.append(
+                "<li>"
+                f"<div class=\"collection-node\"><span class=\"badge\">{kind}</span> <strong>{title}</strong>{meta_html}</div>"
+                f"{children_html}"
+                "</li>"
+            )
+        parts.append("</ul>")
+        return "".join(parts)
+
+    return render_nodes(entries)
+
+
+def write_collection_report_html(path: Path, collection_payload: dict) -> None:
+    metadata = collection_payload.get("metadata", {})
+    catalog = collection_payload.get("catalog", [])
+    master_index = collection_payload.get("master_index", [])
+    summary = collection_payload.get("summary", "")
+
+    rows = []
+    for entry in catalog:
+        top_titles = " | ".join(_collection_escape_html(title) for title in entry.get("top_index_titles", [])[:6])
+        rows.append(
+            "<tr>"
+            f"<td>{_collection_escape_html(entry.get('file_name'))}</td>"
+            f"<td>{_collection_escape_html(entry.get('file_type'))}</td>"
+            f"<td>{_collection_escape_html(entry.get('document_archetype'))}</td>"
+            f"<td>{_collection_escape_html(entry.get('block_count'))}</td>"
+            f"<td>{_collection_escape_html(entry.get('output_dir'))}</td>"
+            f"<td>{top_titles}</td>"
+            "</tr>"
+        )
+
+    file_type_counts = metadata.get("file_type_counts", {})
+    archetype_counts = metadata.get("document_archetype_counts", {})
+
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>INDEX_ALL Collection Report - {_collection_escape_html(metadata.get('collection_name', 'Acervo'))}</title>
+  <style>
+    body {{
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #f3f7fb;
+      color: #0f172a;
+    }}
+    .page {{
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px 48px;
+    }}
+    .hero {{
+      background: linear-gradient(135deg, #07306C, #046B91);
+      color: white;
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 20px 48px rgba(7, 48, 108, 0.2);
+    }}
+    .cards {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 20px 0 24px;
+    }}
+    .card {{
+      background: white;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    }}
+    .section {{
+      background: white;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+      margin-top: 18px;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+    }}
+    th, td {{
+      border-bottom: 1px solid #dbe3ee;
+      text-align: left;
+      vertical-align: top;
+      padding: 10px 8px;
+    }}
+    th {{
+      color: #07306C;
+    }}
+    .badge {{
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #07306C;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .collection-tree {{
+      list-style: none;
+      padding-left: 18px;
+      margin: 10px 0 0;
+    }}
+    .collection-tree > li {{
+      margin: 10px 0;
+    }}
+    .collection-node {{
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #f8fbff;
+      border: 1px solid #d8e7f7;
+    }}
+    .collection-node-meta {{
+      color: #475569;
+      font-size: 12px;
+      margin-top: 6px;
+    }}
+    .metrics {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }}
+    .metric {{
+      background: #eef5ff;
+      color: #07306C;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 13px;
+    }}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <h1>INDEX_ALL Collection Report</h1>
+      <p><strong>Coleção:</strong> {_collection_escape_html(metadata.get('collection_name', 'Acervo'))}</p>
+      <p><strong>Origem:</strong> {_collection_escape_html(metadata.get('source_path', ''))}</p>
+      <p>{_collection_escape_html(summary or 'Sem resumo consolidado disponível.')}</p>
+    </section>
+
+    <section class="cards">
+      <div class="card"><strong>Arquivos</strong><div>{_collection_escape_html(metadata.get('file_count', 0))}</div></div>
+      <div class="card"><strong>Blocos</strong><div>{_collection_escape_html(metadata.get('total_block_count', 0))}</div></div>
+      <div class="card"><strong>Índice Mestre</strong><div>{_collection_escape_html(metadata.get('master_index_entry_count', 0))}</div></div>
+    </section>
+
+    <section class="section">
+      <h2>Contagens Agregadas</h2>
+      <div class="metrics">
+        {''.join(f'<span class="metric">{_collection_escape_html(key)}: {_collection_escape_html(value)}</span>' for key, value in file_type_counts.items())}
+      </div>
+      <div class="metrics">
+        {''.join(f'<span class="metric">{_collection_escape_html(key)}: {_collection_escape_html(value)}</span>' for key, value in archetype_counts.items())}
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Catálogo Do Acervo</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Arquivo</th>
+            <th>Tipo</th>
+            <th>Arquétipo</th>
+            <th>Blocos</th>
+            <th>Output Dir</th>
+            <th>Principais Entradas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {''.join(rows) if rows else '<tr><td colspan="6">Sem arquivos catalogados.</td></tr>'}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>Índice Mestre Da Pasta</h2>
+      {_render_collection_tree(list(master_index))}
+    </section>
+  </div>
+</body>
+</html>
+"""
+    path.write_text(html, encoding="utf-8")
