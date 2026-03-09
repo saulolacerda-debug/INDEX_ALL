@@ -260,7 +260,9 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
         lines.extend(["## Busca E Chunks", ""])
         search = semantic.get("search", {})
         chunks = semantic.get("chunks", {})
+        embeddings = semantic.get("embeddings", {})
         retrieval_preview = semantic.get("retrieval_preview", {})
+        query_results = semantic.get("query_results", {})
         if search:
             lines.append(f"- Registros no search index: `{search.get('record_count', 0)}`")
             raw_record_count = search.get("raw_record_count")
@@ -281,6 +283,19 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
             sample_headings = chunks.get("sample_headings", []) or []
             if sample_headings:
                 lines.append(f"- Primeiros chunks: `{' | '.join(sample_headings[:5])}`")
+        if embeddings:
+            lines.append(f"- Embeddings persistidos: `{embeddings.get('embedding_count', 0)}`")
+            if embeddings.get("embedding_state"):
+                lines.append(f"- Estado do índice vetorial: `{embeddings.get('embedding_state')}`")
+            if embeddings.get("vector_size"):
+                lines.append(f"- Dimensão vetorial local: `{embeddings.get('vector_size')}`")
+            if embeddings.get("embedding_algorithm"):
+                lines.append(f"- Algoritmo de embedding: `{embeddings.get('embedding_algorithm')}`")
+        if retrieval_preview:
+            lines.append(f"- Modo de retrieval: `{retrieval_preview.get('mode', 'textual_retrieval_ready')}`")
+            preview_queries = retrieval_preview.get("preview_queries", []) or []
+            if preview_queries:
+                lines.append(f"- Queries de preview: `{' | '.join(preview_queries[:5])}`")
         sample_chunks = retrieval_preview.get("sample_chunks", []) or []
         if sample_chunks:
             lines.append("- Preview de retrieval:")
@@ -290,10 +305,44 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
                     str(chunk.get("document_archetype") or ""),
                     str(chunk.get("heading_path_text") or ""),
                     f"score={chunk.get('score', 0)}",
+                    f"text={chunk.get('text_score', 0)}",
+                    f"vector={chunk.get('vector_score', 0)}",
+                    str(chunk.get("retrieval_mode") or ""),
                 ]
                 if chunk.get("locator_path"):
                     parts.append(str(chunk["locator_path"]))
                 lines.append(f"  {' | '.join(part for part in parts if part)}")
+        sample_queries = retrieval_preview.get("sample_queries", []) or []
+        if sample_queries:
+            lines.append("- Preview por query:")
+            for preview in sample_queries[:3]:
+                query = str(preview.get("query") or "")
+                lines.append(f"  query=`{query}`")
+                for item in (preview.get("results", []) or [])[:2]:
+                    parts = [
+                        str(item.get("file_name") or ""),
+                        str(item.get("document_archetype") or ""),
+                        str(item.get("heading_path_text") or ""),
+                        f"score={item.get('score', 0)}",
+                    ]
+                    if item.get("locator_path"):
+                        parts.append(str(item["locator_path"]))
+                    lines.append(f"    {' | '.join(part for part in parts if part)}")
+        if query_results:
+            lines.append(f"- Última consulta: `{query_results.get('query', '')}`")
+            lines.append(f"- Hits retornados: `{query_results.get('total_hits', 0)}`")
+            if query_results.get("results"):
+                lines.append("- Preview dos resultados da consulta:")
+                for item in (query_results.get("results", []) or [])[:3]:
+                    parts = [
+                        str(item.get("file_name") or ""),
+                        str(item.get("document_archetype") or ""),
+                        str(item.get("heading_path_text") or ""),
+                        f"score={item.get('score', 0)}",
+                    ]
+                    if item.get("locator_path"):
+                        parts.append(str(item["locator_path"]))
+                    lines.append(f"  {' | '.join(part for part in parts if part)}")
         lines.append("")
 
     lines.extend(["## Resumo Consolidado", "", summary or "Sem resumo consolidado disponível.", ""])
