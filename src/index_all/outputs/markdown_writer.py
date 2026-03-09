@@ -210,6 +210,7 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
     metadata = collection_payload.get("metadata", {})
     catalog = collection_payload.get("catalog", [])
     master_index = collection_payload.get("master_index", [])
+    semantic = collection_payload.get("semantic", {})
     summary = collection_payload.get("summary", "")
 
     lines = [
@@ -254,6 +255,22 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
         "## Arquivos Com Estrutura Procedural",
         [f"`{name}`" for name in metadata.get("files_with_procedural_structure", [])],
     )
+
+    if semantic:
+        lines.extend(["## Busca E Chunks", ""])
+        search = semantic.get("search", {})
+        chunks = semantic.get("chunks", {})
+        if search:
+            lines.append(f"- Registros no search index: `{search.get('record_count', 0)}`")
+            supported_filters = search.get("supported_filters", []) or []
+            if supported_filters:
+                lines.append(f"- Filtros suportados: `{', '.join(supported_filters)}`")
+        if chunks:
+            lines.append(f"- Chunks gerados: `{chunks.get('chunk_count', 0)}`")
+            sample_headings = chunks.get("sample_headings", []) or []
+            if sample_headings:
+                lines.append(f"- Primeiros chunks: `{' | '.join(sample_headings[:5])}`")
+        lines.append("")
 
     lines.extend(["## Resumo Consolidado", "", summary or "Sem resumo consolidado disponível.", ""])
     lines.extend(["## Catálogo Do Acervo", ""])

@@ -81,6 +81,8 @@ def test_process_collection_writes_consolidated_outputs_without_breaking_file_ou
         assert (collection_dir / "collection_metadata.json").exists()
         assert (collection_dir / "catalog.json").exists()
         assert (collection_dir / "master_index.json").exists()
+        assert (collection_dir / "search_index.json").exists()
+        assert (collection_dir / "chunks.json").exists()
         assert (collection_dir / "collection_summary.md").exists()
         assert (collection_dir / "collection_report.html").exists()
 

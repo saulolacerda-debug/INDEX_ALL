@@ -1558,6 +1558,7 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
     metadata = collection_payload.get("metadata", {})
     catalog = collection_payload.get("catalog", [])
     master_index = collection_payload.get("master_index", [])
+    semantic = collection_payload.get("semantic", {})
     summary = collection_payload.get("summary", "")
 
     rows = []
@@ -1576,6 +1577,13 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
 
     file_type_counts = metadata.get("file_type_counts", {})
     archetype_counts = metadata.get("document_archetype_counts", {})
+    search = semantic.get("search", {}) if isinstance(semantic, dict) else {}
+    chunks = semantic.get("chunks", {}) if isinstance(semantic, dict) else {}
+    retrieval_preview = semantic.get("retrieval_preview", {}) if isinstance(semantic, dict) else {}
+    sample_chunk_list = "".join(
+        f"<li>{_collection_escape_html(item)}</li>"
+        for item in (chunks.get("sample_headings", []) or [])[:8]
+    ) or "<li>Sem preview de chunks.</li>"
 
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1694,6 +1702,8 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
       <div class="card"><strong>Arquivos</strong><div>{_collection_escape_html(metadata.get('file_count', 0))}</div></div>
       <div class="card"><strong>Blocos</strong><div>{_collection_escape_html(metadata.get('total_block_count', 0))}</div></div>
       <div class="card"><strong>Índice Mestre</strong><div>{_collection_escape_html(metadata.get('master_index_entry_count', 0))}</div></div>
+      <div class="card"><strong>Search Index</strong><div>{_collection_escape_html(search.get('record_count', 0))}</div></div>
+      <div class="card"><strong>Chunks</strong><div>{_collection_escape_html(chunks.get('chunk_count', 0))}</div></div>
     </section>
 
     <section class="section">
@@ -1728,6 +1738,16 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
     <section class="section">
       <h2>Índice Mestre Da Pasta</h2>
       {_render_collection_tree(list(master_index))}
+    </section>
+
+    <section class="section">
+      <h2>Busca E Chunks</h2>
+      <p><strong>Registros indexados para busca:</strong> {_collection_escape_html(search.get('record_count', 0))}</p>
+      <p><strong>Chunks semânticos:</strong> {_collection_escape_html(chunks.get('chunk_count', 0))}</p>
+      <p><strong>Filtros suportados:</strong> {_collection_escape_html(', '.join(search.get('supported_filters', []) or retrieval_preview.get('supported_filters', []) or []))}</p>
+      <ul>
+        {sample_chunk_list}
+      </ul>
     </section>
   </div>
 </body>
