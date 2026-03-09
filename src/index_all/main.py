@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from index_all.config import get_settings
+from index_all.indexing.catalog_builder import build_catalog
+from index_all.indexing.collection_summary_builder import build_collection_metadata, build_collection_summary
 from index_all.indexing.consultation_payload import (
     build_ai_context_payload,
     build_content_payload,
@@ -11,13 +14,18 @@ from index_all.indexing.consultation_payload import (
     build_metadata_payload,
 )
 from index_all.indexing.document_classifier import classify_document_archetype
+from index_all.indexing.master_index_builder import build_master_index
 from index_all.indexing.metadata_extractor import extract_common_metadata
 from index_all.indexing.structure_indexer import build_structure_index
 from index_all.indexing.summary_builder import build_summary
 from index_all.ingestion.file_router import get_parser_for_path, is_ignored_path
-from index_all.outputs.html_writer import write_report_html
-from index_all.outputs.json_writer import write_json
-from index_all.outputs.markdown_writer import write_ai_context_markdown, write_summary_markdown
+from index_all.outputs.html_writer import write_collection_report_html, write_report_html
+from index_all.outputs.json_writer import write_json, write_json_bundle
+from index_all.outputs.markdown_writer import (
+    write_ai_context_markdown,
+    write_collection_summary_markdown,
+    write_summary_markdown,
+)
 from index_all.utils.logging_utils import configure_logging, get_logger
 from index_all.utils.paths import ensure_dir, unique_output_dir
 
@@ -89,6 +97,44 @@ def process_file(file_path: Path, output_root: Path) -> Path:
     return output_dir
 
 
+def _load_processed_document(output_dir: Path) -> dict:
+    return {
+        "metadata": json.loads((output_dir / "metadata.json").read_text(encoding="utf-8")),
+        "content": json.loads((output_dir / "content.json").read_text(encoding="utf-8")),
+        "index": json.loads((output_dir / "index.json").read_text(encoding="utf-8")),
+        "output_dir": str(output_dir.resolve()),
+    }
+
+
+def process_collection(source_dir: Path, output_root: Path, processed_output_dirs: list[Path]) -> Path:
+    processed_documents = [_load_processed_document(output_dir) for output_dir in processed_output_dirs]
+    catalog = build_catalog(processed_documents)
+    master_index = build_master_index(processed_documents)
+    collection_metadata = build_collection_metadata(source_dir, catalog, master_index)
+    collection_summary = build_collection_summary(collection_metadata, catalog, master_index)
+    collection_payload = {
+        "metadata": collection_metadata,
+        "catalog": catalog,
+        "master_index": master_index,
+        "summary": collection_summary,
+    }
+
+    collection_dir = unique_output_dir(output_root, f"{source_dir.name}_collection")
+    write_json_bundle(
+        collection_dir,
+        {
+            "collection_metadata.json": collection_metadata,
+            "catalog.json": catalog,
+            "master_index.json": master_index,
+        },
+    )
+    write_collection_summary_markdown(collection_dir / "collection_summary.md", collection_payload)
+    write_collection_report_html(collection_dir / "collection_report.html", collection_payload)
+
+    logger.info("Built collection %s -> %s", source_dir.name, collection_dir)
+    return collection_dir
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="INDEX_ALL - universal file indexer")
     parser.add_argument("input_path", help="Path to a file or directory")
@@ -123,16 +169,21 @@ def main() -> None:
 
     supported = 0
     skipped = 0
+    processed_output_dirs: list[Path] = []
     for file_path in files:
         try:
-            process_file(file_path, output_root)
+            output_dir = process_file(file_path, output_root)
             supported += 1
+            processed_output_dirs.append(output_dir)
         except ValueError as exc:
             skipped += 1
             logger.warning("Skipping %s: %s", file_path, exc)
         except Exception as exc:  # pragma: no cover
             skipped += 1
             logger.exception("Failed processing %s: %s", file_path, exc)
+
+    if input_path.is_dir() and processed_output_dirs:
+        process_collection(input_path, output_root, processed_output_dirs)
 
     logger.info("Done. Supported=%s | Skipped=%s", supported, skipped)
 
