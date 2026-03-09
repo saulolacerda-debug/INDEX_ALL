@@ -31,3 +31,8 @@ data/samples/*
 
 # Validation outputs
 data/processed_step3_validation/
+
+# Temp dirs from tests / Windows
+pytest-cache-files-*/
+pytest_tmp/
+tmp*/

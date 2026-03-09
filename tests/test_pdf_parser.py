@@ -233,13 +233,14 @@ def test_pdf_parser_builds_manual_without_duplicate_toc_and_with_valid_locators(
     top_entry = index_entries[0]
     child_titles = [child["title"] for child in top_entry["children"]]
     step_entry = top_entry["children"][1]["children"][0]
-    interface_entry = step_entry["children"][0]
+    interface_blocks = [block for block in blocks if (block.get("extra", {}) or {}).get("manual_group") == "interface_label"]
 
     assert mode == "structured_manual"
     assert top_entry["title"] == "APURAÇÃO ASSISTIDA - PRIMEIROS PASSOS"
     assert child_titles == ["1. Objetivos", "2. Procedimento", "3. Resumo"]
     assert step_entry["title"] == "Etapa 1 - Acessar portal"
-    assert interface_entry["level"] == 4
+    assert not step_entry["children"]
+    assert [block["text"] for block in interface_blocks] == ["Portal TRIBUTOS SOBRE BENS E SERVIÇOS"]
     assert all(entry["title"] != "Page 1" for entry in index_entries)
     assert all(
         locator.get("line_start") is None

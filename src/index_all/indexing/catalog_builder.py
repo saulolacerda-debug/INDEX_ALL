@@ -26,8 +26,10 @@ def build_catalog(processed_documents: Sequence[dict]) -> list[dict]:
                 "file_name": metadata.get("file_name"),
                 "file_type": metadata.get("file_type"),
                 "document_archetype": content.get("document_archetype") or metadata.get("document_archetype"),
+                "primary_structure": document_profile.get("primary_structure"),
                 "output_dir": str(processed_document.get("output_dir") or ""),
                 "top_index_titles": _top_index_titles(index_entries),
+                "search_preview": " | ".join(_top_index_titles(index_entries)),
                 "block_count": block_count,
                 "index_entry_count": document_profile.get("index_entry_count", len(index_entries)),
             }

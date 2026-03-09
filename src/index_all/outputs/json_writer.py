@@ -7,7 +7,7 @@ from typing import Mapping
 
 def write_json(path: Path, payload: dict | list) -> None:
     path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 
