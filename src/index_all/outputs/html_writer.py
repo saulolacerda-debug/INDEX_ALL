@@ -1579,7 +1579,9 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
     archetype_counts = metadata.get("document_archetype_counts", {})
     search = semantic.get("search", {}) if isinstance(semantic, dict) else {}
     chunks = semantic.get("chunks", {}) if isinstance(semantic, dict) else {}
+    embeddings = semantic.get("embeddings", {}) if isinstance(semantic, dict) else {}
     retrieval_preview = semantic.get("retrieval_preview", {}) if isinstance(semantic, dict) else {}
+    query_results = semantic.get("query_results", {}) if isinstance(semantic, dict) else {}
     sample_chunk_list = "".join(
         f"<li>{_collection_escape_html(item)}</li>"
         for item in (chunks.get("sample_headings", []) or [])[:8]
@@ -1590,10 +1592,43 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
         f"{_collection_escape_html(item.get('document_archetype'))} | "
         f"{_collection_escape_html(item.get('heading_path_text'))} | "
         f"score={_collection_escape_html(item.get('score', 0))}"
+        f" | text={_collection_escape_html(item.get('text_score', 0))}"
+        f" | vector={_collection_escape_html(item.get('vector_score', 0))}"
+        f"{' | ' + _collection_escape_html(item.get('retrieval_mode')) if item.get('retrieval_mode') else ''}"
         f"{' | ' + _collection_escape_html(item.get('locator_path')) if item.get('locator_path') else ''}"
         "</li>"
         for item in (retrieval_preview.get("sample_chunks", []) or [])[:5]
     ) or "<li>Sem preview de retrieval.</li>"
+    sample_query_items = []
+    for item in (retrieval_preview.get("sample_queries", []) or [])[:4]:
+        result_lines = []
+        for result in (item.get("results", []) or [])[:2]:
+            result_lines.append(
+                "<div>"
+                f"{_collection_escape_html(result.get('file_name'))} | "
+                f"{_collection_escape_html(result.get('document_archetype'))} | "
+                f"{_collection_escape_html(result.get('heading_path_text'))} | "
+                f"score={_collection_escape_html(result.get('score', 0))}"
+                f"{' | ' + _collection_escape_html(result.get('locator_path')) if result.get('locator_path') else ''}"
+                "</div>"
+            )
+        sample_query_items.append(
+            "<li>"
+            f"<strong>{_collection_escape_html(item.get('query'))}</strong>"
+            f"<div>{''.join(result_lines)}</div>"
+            "</li>"
+        )
+    sample_queries_list = "".join(sample_query_items) or "<li>Sem preview por query.</li>"
+    query_results_list = "".join(
+        "<li>"
+        f"{_collection_escape_html(item.get('file_name'))} | "
+        f"{_collection_escape_html(item.get('document_archetype'))} | "
+        f"{_collection_escape_html(item.get('heading_path_text'))} | "
+        f"score={_collection_escape_html(item.get('score', 0))}"
+        f"{' | ' + _collection_escape_html(item.get('locator_path')) if item.get('locator_path') else ''}"
+        "</li>"
+        for item in (query_results.get("results", []) or [])[:5]
+    ) or "<li>Sem consulta executada via CLI.</li>"
     duplicates_removed = (search.get("exact_duplicates_removed", 0) or 0) + (search.get("near_duplicates_removed", 0) or 0)
 
     html = f"""<!DOCTYPE html>
@@ -1759,13 +1794,25 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
       <p><strong>Duplicatas removidas:</strong> {_collection_escape_html(duplicates_removed)}</p>
       <p><strong>Chunks semânticos:</strong> {_collection_escape_html(chunks.get('chunk_count', 0))}</p>
       <p><strong>Filtros suportados:</strong> {_collection_escape_html(', '.join(search.get('supported_filters', []) or retrieval_preview.get('supported_filters', []) or []))}</p>
-      <p><strong>Embeddings persistidos:</strong> {_collection_escape_html((chunks.get('metadata', {}) or {}).get('embedding_count', 0))}</p>
+      <p><strong>Embeddings persistidos:</strong> {_collection_escape_html(embeddings.get('embedding_count', (chunks.get('metadata', {}) or {}).get('embedding_count', 0)))}</p>
+      <p><strong>Dimensão vetorial local:</strong> {_collection_escape_html(embeddings.get('vector_size', 0))}</p>
+      <p><strong>Modo de retrieval:</strong> {_collection_escape_html(retrieval_preview.get('mode', 'textual_retrieval_ready'))}</p>
       <ul>
         {sample_chunk_list}
       </ul>
       <h3>Preview De Retrieval</h3>
       <ul>
         {retrieval_preview_list}
+      </ul>
+      <h3>Preview Por Query</h3>
+      <ul>
+        {sample_queries_list}
+      </ul>
+      <h3>Última Consulta CLI</h3>
+      <p><strong>Query:</strong> {_collection_escape_html(query_results.get('query', ''))}</p>
+      <p><strong>Hits retornados:</strong> {_collection_escape_html(query_results.get('total_hits', 0))}</p>
+      <ul>
+        {query_results_list}
       </ul>
     </section>
   </div>

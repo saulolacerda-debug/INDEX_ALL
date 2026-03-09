@@ -35,7 +35,7 @@ SPECIALIZED_ARCHETYPES = {
 }
 
 
-def _normalize_text(value: Any) -> str:
+def normalize_text(value: Any) -> str:
     compact = " ".join(str(value or "").split()).strip().lower()
     if not compact:
         return ""
@@ -43,8 +43,8 @@ def _normalize_text(value: Any) -> str:
     return "".join(character for character in normalized if not unicodedata.combining(character))
 
 
-def _query_tokens(query: str) -> list[str]:
-    return [token for token in re.split(r"\W+", _normalize_text(query)) if token]
+def query_tokens(query: str) -> list[str]:
+    return [token for token in re.split(r"\W+", normalize_text(query)) if token]
 
 
 def _snippet(text: str, query: str, max_length: int = 220) -> str:
@@ -52,14 +52,14 @@ def _snippet(text: str, query: str, max_length: int = 220) -> str:
     if not compact:
         return ""
 
-    normalized_text = _normalize_text(compact)
-    normalized_query = _normalize_text(query)
+    normalized_text = normalize_text(compact)
+    normalized_query = normalize_text(query)
     if not normalized_query:
         return compact[:max_length]
 
     position = normalized_text.find(normalized_query)
     if position == -1:
-        tokens = _query_tokens(query)
+        tokens = query_tokens(query)
         position = next((normalized_text.find(token) for token in tokens if token and normalized_text.find(token) != -1), -1)
         if position == -1:
             return compact[:max_length]
@@ -103,16 +103,16 @@ def score_text_match(
     document_archetype: str = "",
     source_kind: str = "",
 ) -> dict[str, Any]:
-    normalized_query = _normalize_text(query)
+    normalized_query = normalize_text(query)
     if not normalized_query:
         return {"score": 0, "score_breakdown": {}}
 
-    tokens = list(dict.fromkeys(_query_tokens(query)))
-    title_text = _normalize_text(title)
-    heading_text = _normalize_text(" ".join(heading_path or []))
-    body_text = _normalize_text(text)
-    file_text = _normalize_text(file_name)
-    archetype_text = _normalize_text(document_archetype)
+    tokens = list(dict.fromkeys(query_tokens(query)))
+    title_text = normalize_text(title)
+    heading_text = normalize_text(" ".join(heading_path or []))
+    body_text = normalize_text(text)
+    file_text = normalize_text(file_name)
+    archetype_text = normalize_text(document_archetype)
     breakdown: dict[str, int] = {}
 
     def add(label: str, value: int) -> None:
@@ -355,8 +355,8 @@ def build_file_search_records(processed_document: Mapping[str, Any]) -> list[dic
 
 
 def _record_signature_text(record: Mapping[str, Any], *, max_length: int = 240) -> str:
-    title_text = _normalize_text(record.get("title") or record.get("heading") or "")
-    compact = _normalize_text(record.get("text") or "")
+    title_text = normalize_text(record.get("title") or record.get("heading") or "")
+    compact = normalize_text(record.get("text") or "")
     compact = re.sub(r"\bpagina\s+\d+\b", " ", compact)
     compact = re.sub(r"\blinhas?\s+\d+(?:-\d+)?\b", " ", compact)
     compact = re.sub(r"\s+", " ", compact).strip(" |-")
@@ -367,16 +367,16 @@ def _record_signature_text(record: Mapping[str, Any], *, max_length: int = 240) 
 
 def _record_signature(record: Mapping[str, Any]) -> tuple[str, str, str]:
     return (
-        _normalize_text(record.get("file_name") or ""),
-        _normalize_text(record.get("heading_path_text") or _heading_path_text(record)),
+        normalize_text(record.get("file_name") or ""),
+        normalize_text(record.get("heading_path_text") or _heading_path_text(record)),
         _record_signature_text(record),
     )
 
 
 def _records_are_near_duplicates(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
-    if _normalize_text(left.get("file_name") or "") != _normalize_text(right.get("file_name") or ""):
+    if normalize_text(left.get("file_name") or "") != normalize_text(right.get("file_name") or ""):
         return False
-    if _normalize_text(left.get("heading_path_text") or _heading_path_text(left)) != _normalize_text(
+    if normalize_text(left.get("heading_path_text") or _heading_path_text(left)) != normalize_text(
         right.get("heading_path_text") or _heading_path_text(right)
     ):
         return False
@@ -400,8 +400,8 @@ def _record_quality(record: Mapping[str, Any]) -> tuple[int, int, int, int]:
     return (
         SOURCE_KIND_PRIORITY.get(str(record.get("source_kind") or ""), 0),
         locator_bonus,
-        len(_normalize_text(record.get("text") or "")),
-        len(_normalize_text(record.get("heading_path_text") or _heading_path_text(record))),
+        len(normalize_text(record.get("text") or "")),
+        len(normalize_text(record.get("heading_path_text") or _heading_path_text(record))),
     )
 
 
@@ -411,7 +411,7 @@ def _merge_records(preferred: Mapping[str, Any], candidate: Mapping[str, Any]) -
         winner, loser = candidate, preferred
 
     merged = dict(winner)
-    if len(_normalize_text(loser.get("text") or "")) > len(_normalize_text(merged.get("text") or "")) and (
+    if len(normalize_text(loser.get("text") or "")) > len(normalize_text(merged.get("text") or "")) and (
         SOURCE_KIND_PRIORITY.get(str(loser.get("source_kind") or ""), 0)
         >= SOURCE_KIND_PRIORITY.get(str(merged.get("source_kind") or ""), 0) - 1
     ):

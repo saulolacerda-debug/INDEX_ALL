@@ -143,6 +143,7 @@ def _chunk_record(
 
     chunk = {
         "chunk_id": f"chunk_{chunk_index:05d}",
+        "source_kind": "chunk",
         "root_entry_id": root_entry.get("id"),
         "file_name": metadata.get("file_name"),
         "file_type": metadata.get("file_type"),
@@ -161,6 +162,7 @@ def _chunk_record(
             "block_positions": list(sorted(set(int(pos) for pos in positions))),
             "primary_structure": content.get("document_profile", {}).get("primary_structure"),
             "text_length": len(text),
+            "token_count": len(text.split()),
         },
         "embedding": None,
     }
@@ -407,6 +409,7 @@ def _generic_chunks_from_blocks(processed_document: dict, *, start_index: int) -
         chunks.append(
             {
                 "chunk_id": f"chunk_{chunk_index:05d}",
+                "source_kind": "chunk",
                 "root_entry_id": None,
                 "file_name": metadata.get("file_name"),
                 "file_type": metadata.get("file_type"),
@@ -432,6 +435,7 @@ def _generic_chunks_from_blocks(processed_document: dict, *, start_index: int) -
                     "block_positions": positions,
                     "primary_structure": content.get("document_profile", {}).get("primary_structure"),
                     "text_length": len(text),
+                    "token_count": len(text.split()),
                 },
                 "embedding": None,
             }
@@ -446,6 +450,7 @@ def _generic_chunks_from_blocks(processed_document: dict, *, start_index: int) -
         chunks.append(
             {
                 "chunk_id": f"chunk_{chunk_index:05d}",
+                "source_kind": "chunk",
                 "root_entry_id": None,
                 "file_name": metadata.get("file_name"),
                 "file_type": metadata.get("file_type"),
@@ -471,6 +476,7 @@ def _generic_chunks_from_blocks(processed_document: dict, *, start_index: int) -
                     "block_positions": positions,
                     "primary_structure": content.get("document_profile", {}).get("primary_structure"),
                     "text_length": len(text),
+                    "token_count": len(text.split()),
                 },
                 "embedding": None,
             }

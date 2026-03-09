@@ -20,9 +20,11 @@ def test_chunker_builds_normative_chunks_by_article_with_locator_and_heading_pat
         assert chunks
         first_chunk = chunks[0]
         assert first_chunk["document_archetype"] == "legislation_normative"
+        assert first_chunk["source_kind"] == "chunk"
         assert first_chunk["heading"].startswith("Art. 1º")
         assert first_chunk["heading_path"][-1].startswith("Art. 1º")
         assert first_chunk["locator"]["article"] == "Art. 1º"
+        assert first_chunk["metadata"]["token_count"] > 0
         assert "Esta lei estabelece normas gerais" in first_chunk["text"]
 
 
@@ -56,6 +58,8 @@ def test_chunker_builds_manual_chunks_by_section_or_step():
         assert objetivos_chunk["document_archetype"] == "manual_procedural"
         assert objetivos_chunk["locator"]["line_start"] is not None
         assert objetivos_chunk["heading_path"][-1] == "Objetivos"
+        assert objetivos_chunk["source_kind"] == "chunk"
+        assert objetivos_chunk["metadata"]["token_count"] > 0
 
 
 def test_chunker_splits_procedural_pdf_chunks_by_step_and_demotes_interface_context():
@@ -82,4 +86,6 @@ def test_chunker_splits_procedural_pdf_chunks_by_step_and_demotes_interface_cont
     assert any(path.endswith("Etapa 2 - Conferir retorno") for path in heading_paths)
     assert all("Portal TRIBUTOS SOBRE BENS E SERVIÇOS" not in path for path in heading_paths)
     assert all(len(chunk["text"]) < 260 for chunk in chunks)
+    assert all(chunk["source_kind"] == "chunk" for chunk in chunks)
+    assert all((chunk.get("metadata", {}) or {}).get("token_count", 0) > 0 for chunk in chunks)
     assert any((chunk.get("metadata", {}) or {}).get("interface_context") == "Portal TRIBUTOS SOBRE BENS E SERVIÇOS" for chunk in chunks)
