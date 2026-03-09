@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from index_all.main import build_parser, iter_supported_files, process_collection, process_file
-from index_all.semantics.search_engine import search_collection, search_file
+from index_all.semantics.search_engine import score_text_match, search_collection, search_file
 
 from tests.helpers import create_legal_docx, create_manual_docx, workspace_test_dir
 
@@ -116,3 +116,28 @@ def test_cli_help_mentions_hybrid_retrieval_options():
     assert "--limit" in help_text
     assert "--archetype" in help_text
     assert "--file-name" in help_text
+
+
+def test_score_text_match_prioritizes_exact_legal_reference_with_suffix():
+    exact = score_text_match(
+        "art. 156-a ibs",
+        title="Art. 156-A - Imposto sobre Bens e Serviços (IBS)",
+        heading_path=["Título I", "Art. 156-A - Imposto sobre Bens e Serviços (IBS)"],
+        text="Art. 156-A institui o IBS.",
+        file_name="norma.pdf",
+        document_archetype="legislation_normative",
+        source_kind="chunk",
+    )
+    partial = score_text_match(
+        "art. 156-a ibs",
+        title="Art. 156 - Regras gerais do IBS",
+        heading_path=["Título I", "Art. 156 - Regras gerais do IBS"],
+        text="Art. 156 trata de disposições gerais do IBS.",
+        file_name="norma.pdf",
+        document_archetype="legislation_normative",
+        source_kind="chunk",
+    )
+
+    assert exact["score"] > partial["score"]
+    assert exact["score_breakdown"]["legal_ref_title_exact"] > 0
+    assert partial["score"] == 0

@@ -34,6 +34,7 @@ def test_embedding_store_builds_persists_and_reuses_embeddings():
 
         assert payload["artifact_role"] == "local_embeddings_index"
         assert payload["metadata"]["embedding_count"] == 1
+        assert payload["metadata"]["embedding_state"] == "ready"
         assert payload["records"][0]["chunk_id"] == "chunk_00001"
         assert payload["records"][0]["file_name"] == "norma.docx"
         assert payload["records"][0]["document_archetype"] == "legislation_normative"
@@ -62,4 +63,5 @@ def test_collection_summary_and_metadata_reflect_persisted_embeddings():
 
         assert collection_metadata["available_artifacts"]["embeddings_index"] == "embeddings_index.json"
         assert collection_metadata["semantic"]["embeddings"]["embedding_count"] > 0
+        assert collection_metadata["semantic"]["embeddings"]["embedding_state"] == "ready"
         assert "Chunks com embedding persistido" in collection_summary

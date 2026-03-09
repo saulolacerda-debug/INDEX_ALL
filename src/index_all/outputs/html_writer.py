@@ -1795,6 +1795,7 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
       <p><strong>Chunks semânticos:</strong> {_collection_escape_html(chunks.get('chunk_count', 0))}</p>
       <p><strong>Filtros suportados:</strong> {_collection_escape_html(', '.join(search.get('supported_filters', []) or retrieval_preview.get('supported_filters', []) or []))}</p>
       <p><strong>Embeddings persistidos:</strong> {_collection_escape_html(embeddings.get('embedding_count', (chunks.get('metadata', {}) or {}).get('embedding_count', 0)))}</p>
+      <p><strong>Estado do índice vetorial:</strong> {_collection_escape_html(embeddings.get('embedding_state', 'not_built'))}</p>
       <p><strong>Dimensão vetorial local:</strong> {_collection_escape_html(embeddings.get('vector_size', 0))}</p>
       <p><strong>Modo de retrieval:</strong> {_collection_escape_html(retrieval_preview.get('mode', 'textual_retrieval_ready'))}</p>
       <ul>

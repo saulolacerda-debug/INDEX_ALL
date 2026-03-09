@@ -285,6 +285,8 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
                 lines.append(f"- Primeiros chunks: `{' | '.join(sample_headings[:5])}`")
         if embeddings:
             lines.append(f"- Embeddings persistidos: `{embeddings.get('embedding_count', 0)}`")
+            if embeddings.get("embedding_state"):
+                lines.append(f"- Estado do índice vetorial: `{embeddings.get('embedding_state')}`")
             if embeddings.get("vector_size"):
                 lines.append(f"- Dimensão vetorial local: `{embeddings.get('vector_size')}`")
             if embeddings.get("embedding_algorithm"):

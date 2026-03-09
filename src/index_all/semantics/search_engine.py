@@ -33,6 +33,8 @@ SPECIALIZED_ARCHETYPES = {
     "xml_structured",
     "financial_statement_ofx",
 }
+LEGAL_REFERENCE_ART_PATTERN = re.compile(r"\bart(?:igo)?\.?\s*(\d{1,4})(?:\s*[-]?\s*([a-z]))?\b", re.IGNORECASE)
+LEGAL_REFERENCE_BARE_PATTERN = re.compile(r"\b(\d{1,4})\s*-\s*([a-z])\b", re.IGNORECASE)
 
 
 def normalize_text(value: Any) -> str:
@@ -44,7 +46,93 @@ def normalize_text(value: Any) -> str:
 
 
 def query_tokens(query: str) -> list[str]:
-    return [token for token in re.split(r"\W+", normalize_text(query)) if token]
+    return [token for token in re.split(r"\W+", normalize_text(query)) if token and (len(token) > 1 or token.isdigit())]
+
+
+def _normalize_legal_reference(number: str, suffix: str | None = None) -> str:
+    normalized_number = re.sub(r"\D+", "", str(number or ""))
+    normalized_suffix = normalize_text(suffix or "").strip("- ")
+    if not normalized_number:
+        return ""
+    return f"{normalized_number}-{normalized_suffix}" if normalized_suffix else normalized_number
+
+
+def extract_legal_references(value: str, *, allow_bare: bool = False) -> list[str]:
+    references: list[str] = []
+    raw_value = str(value or "")
+
+    for match in LEGAL_REFERENCE_ART_PATTERN.finditer(raw_value):
+        normalized = _normalize_legal_reference(match.group(1), match.group(2))
+        if normalized:
+            references.append(normalized)
+
+    if allow_bare:
+        for match in LEGAL_REFERENCE_BARE_PATTERN.finditer(raw_value):
+            normalized = _normalize_legal_reference(match.group(1), match.group(2))
+            if normalized:
+                references.append(normalized)
+
+    return list(dict.fromkeys(references))
+
+
+def extract_primary_legal_reference(value: str) -> str | None:
+    match = re.match(r'^\s*["“\(]*art(?:igo)?\.?\s*(\d{1,4})(?:\s*[-]?\s*([a-z]))?\b', str(value or ""), re.IGNORECASE)
+    if not match:
+        return None
+    normalized = _normalize_legal_reference(match.group(1), match.group(2))
+    return normalized or None
+
+
+def legal_reference_details(
+    query: str,
+    *,
+    title: str = "",
+    heading_path: Sequence[str] | None = None,
+    text: str = "",
+) -> dict[str, Any]:
+    query_references = extract_legal_references(query, allow_bare=True)
+    if not query_references:
+        return {
+            "query_references": [],
+            "title_exact": 0,
+            "heading_exact": 0,
+            "body_exact": 0,
+            "title_partial_only": 0,
+            "heading_partial_only": 0,
+            "body_partial_only": 0,
+        }
+
+    title_refs = set(extract_legal_references(title, allow_bare=True))
+    heading_refs = set(extract_legal_references(" ".join(heading_path or []), allow_bare=True))
+    body_refs = set(extract_legal_references(text, allow_bare=True))
+    details = {
+        "query_references": query_references,
+        "title_exact": 0,
+        "heading_exact": 0,
+        "body_exact": 0,
+        "title_partial_only": 0,
+        "heading_partial_only": 0,
+        "body_partial_only": 0,
+    }
+
+    for reference in query_references:
+        base_reference = reference.split("-", 1)[0]
+        if reference in title_refs:
+            details["title_exact"] += 1
+        elif "-" in reference and base_reference in title_refs:
+            details["title_partial_only"] += 1
+
+        if reference in heading_refs:
+            details["heading_exact"] += 1
+        elif "-" in reference and base_reference in heading_refs:
+            details["heading_partial_only"] += 1
+
+        if reference in body_refs:
+            details["body_exact"] += 1
+        elif "-" in reference and base_reference in body_refs:
+            details["body_partial_only"] += 1
+
+    return details
 
 
 def _snippet(text: str, query: str, max_length: int = 220) -> str:
@@ -140,6 +228,26 @@ def score_text_match(
     add("body_tokens", min(body_occurrences, max(len(tokens), 1) * 3) * 2)
     add("file_name_tokens", file_hits * 3)
     add("archetype_tokens", archetype_hits * 2)
+
+    legal_details = legal_reference_details(
+        query,
+        title=title,
+        heading_path=heading_path,
+        text=text,
+    )
+    add("legal_ref_title_exact", legal_details["title_exact"] * 26)
+    add("legal_ref_heading_exact", legal_details["heading_exact"] * 24)
+    add("legal_ref_body_exact", legal_details["body_exact"] * 8)
+    add("legal_ref_title_partial_penalty", legal_details["title_partial_only"] * -14)
+    add("legal_ref_heading_partial_penalty", legal_details["heading_partial_only"] * -12)
+    add("legal_ref_body_partial_penalty", legal_details["body_partial_only"] * -4)
+    primary_title_reference = extract_primary_legal_reference(title)
+    for query_reference in legal_details["query_references"]:
+        base_reference = query_reference.split("-", 1)[0]
+        if primary_title_reference == query_reference:
+            add("legal_ref_primary_title_exact", 42)
+        elif "-" in query_reference and primary_title_reference == base_reference:
+            add("legal_ref_primary_title_partial_penalty", -20)
 
     source_boost = SOURCE_KIND_SCORE_BOOST.get(source_kind, 0)
     if source_boost and (title_hits or heading_hits or body_hits or file_hits or normalized_query in body_text):

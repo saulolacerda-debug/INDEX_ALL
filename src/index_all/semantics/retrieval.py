@@ -107,6 +107,7 @@ def search_chunks(
                 "locator_path": chunk.get("locator_path") or format_locator_path(locator) or format_position(locator),
                 "position_text": chunk.get("position_text") or format_position(locator),
                 "snippet": _snippet(text, query, max_length=260),
+                "preview_text": _snippet(text, query, max_length=260),
                 "text_score": round(text_score, 4),
                 "text_score_breakdown": dict(text_match["score_breakdown"]),
                 "vector_score": round(vector_score, 6),
@@ -166,6 +167,7 @@ def _compact_result(chunk: Mapping[str, Any]) -> dict:
         "retrieval_mode": chunk.get("retrieval_mode", "textual"),
         "score_breakdown": dict(chunk.get("score_breakdown", {}) or {}),
         "text_score_breakdown": dict(chunk.get("text_score_breakdown", {}) or {}),
+        "preview_text": chunk.get("preview_text") or _snippet(str(chunk.get("text") or ""), "", max_length=180),
         "text_preview": _snippet(str(chunk.get("text") or ""), "", max_length=180),
     }
 

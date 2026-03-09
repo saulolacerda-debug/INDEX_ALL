@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 
 from index_all.main import iter_supported_files, process_collection, process_file
-from index_all.semantics.retrieval import retrieve_context
+from index_all.semantics.embedding_store import LocalEmbeddingStore
+from index_all.semantics.retrieval import retrieve_context, search_chunks
 
 from tests.helpers import create_legal_docx, create_manual_docx, workspace_test_dir
 
@@ -84,8 +85,10 @@ def test_collection_outputs_include_embeddings_and_enriched_retrieval_preview():
         assert chunks_payload["artifact_role"] == "local_embedding_store"
         assert chunks_payload["chunk_count"] > 0
         assert chunks_payload["metadata"]["embedding_count"] == chunks_payload["chunk_count"]
+        assert chunks_payload["metadata"]["embedding_state"] == "ready"
         assert embeddings_payload["artifact_role"] == "local_embeddings_index"
         assert embeddings_payload["metadata"]["embedding_count"] == embeddings_payload["chunk_count"]
+        assert embeddings_payload["metadata"]["embedding_state"] == "ready"
         assert retrieval_preview["artifact_role"] == "retrieval_preview"
         assert retrieval_preview["mode"] == "hybrid_retrieval_ready"
         assert retrieval_preview["chunk_count"] == chunks_payload["chunk_count"]
@@ -93,6 +96,7 @@ def test_collection_outputs_include_embeddings_and_enriched_retrieval_preview():
         assert retrieval_preview["sample_chunks"][0]["score_breakdown"]
         assert retrieval_preview["sample_chunks"][0]["text_score"] >= 0
         assert retrieval_preview["sample_chunks"][0]["vector_score"] >= 0
+        assert retrieval_preview["sample_chunks"][0]["preview_text"]
         assert retrieval_preview["sample_queries"]
         assert collection_metadata["semantic"]["embeddings"]["embedding_count"] == embeddings_payload["chunk_count"]
         assert "Chunks com embedding persistido" in collection_summary
@@ -100,3 +104,45 @@ def test_collection_outputs_include_embeddings_and_enriched_retrieval_preview():
         assert "Embeddings persistidos" in collection_report
         assert "Preview De Retrieval" in collection_report
         assert "Preview Por Query" in collection_report
+
+
+def test_exact_legal_reference_query_prioritizes_art_156_a_over_art_156():
+    with workspace_test_dir() as temp_root:
+        store = LocalEmbeddingStore(temp_root / "colecao")
+        chunks = [
+            {
+                "chunk_id": "chunk_001",
+                "source_kind": "chunk",
+                "file_name": "norma.pdf",
+                "file_type": "pdf",
+                "document_archetype": "legislation_normative",
+                "heading": "Art. 156 - Disposição geral do IBS",
+                "heading_path": ["Título I", "Art. 156 - Disposição geral do IBS"],
+                "heading_path_text": "Título I > Art. 156 - Disposição geral do IBS",
+                "text": "Art. 156 dispõe sobre regras gerais do IBS.",
+                "locator": {"article": "Art. 156"},
+                "metadata": {"text_length": 44},
+            },
+            {
+                "chunk_id": "chunk_002",
+                "source_kind": "chunk",
+                "file_name": "norma.pdf",
+                "file_type": "pdf",
+                "document_archetype": "legislation_normative",
+                "heading": "Art. 156-A - Imposto sobre Bens e Serviços (IBS)",
+                "heading_path": ["Título I", "Art. 156-A - Imposto sobre Bens e Serviços (IBS)"],
+                "heading_path_text": "Título I > Art. 156-A - Imposto sobre Bens e Serviços (IBS)",
+                "text": "Art. 156-A institui o IBS e disciplina sua competência compartilhada.",
+                "locator": {"article": "Art. 156-A"},
+                "metadata": {"text_length": 66},
+            },
+        ]
+
+        embedding_payload = store.build_embeddings(chunks)
+        hydrated_chunks = store.hydrate_chunks(chunks, embedding_payload=embedding_payload)
+        results = search_chunks("art. 156-a ibs", hydrated_chunks, limit=2)
+
+        assert [item["chunk_id"] for item in results] == ["chunk_002", "chunk_001"]
+        assert results[0]["vector_score"] > 0
+        assert results[0]["score_breakdown"]["legal_reference"] > 0
+        assert results[1]["score_breakdown"]["legal_reference"] == 0

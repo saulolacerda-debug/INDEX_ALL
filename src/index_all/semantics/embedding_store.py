@@ -25,6 +25,16 @@ def _safe_float_list(values: Sequence[float] | None) -> list[float] | None:
     return [round(float(value), 6) for value in values]
 
 
+def _embedding_state(chunk_count: int, embedding_count: int) -> str:
+    if chunk_count <= 0:
+        return "not_built"
+    if embedding_count <= 0:
+        return "not_built"
+    if embedding_count >= chunk_count:
+        return "ready"
+    return "partial"
+
+
 def _l2_normalize(vector: list[float]) -> list[float]:
     magnitude = math.sqrt(sum(value * value for value in vector))
     if magnitude <= 0:
@@ -151,6 +161,7 @@ class LocalEmbeddingStore:
             "metadata": {
                 "embedding_count": 0,
                 "embedding_coverage": 0.0,
+                "embedding_state": "not_built",
                 "vector_size": self.vector_size,
                 "embedding_algorithm": self.algorithm,
                 "document_archetype_counts": {},
@@ -165,6 +176,7 @@ class LocalEmbeddingStore:
             "metadata": {
                 "embedding_count": 0,
                 "embedding_coverage": 0.0,
+                "embedding_state": "not_built",
                 "vector_size": self.vector_size,
                 "embedding_algorithm": self.algorithm,
                 "built_count": 0,
@@ -220,6 +232,7 @@ class LocalEmbeddingStore:
         return {
             "embedding_count": embedding_count,
             "embedding_coverage": round((embedding_count / chunk_count), 4) if chunk_count else 0.0,
+            "embedding_state": _embedding_state(chunk_count, embedding_count),
             "vector_size": self.vector_size,
             "embedding_algorithm": self.algorithm,
             "document_archetype_counts": dict(sorted(archetype_counts.items())),
@@ -238,6 +251,7 @@ class LocalEmbeddingStore:
         return {
             "embedding_count": embedding_count,
             "embedding_coverage": round((embedding_count / chunk_count), 4) if chunk_count else 0.0,
+            "embedding_state": _embedding_state(chunk_count, embedding_count),
             "vector_size": self.vector_size,
             "embedding_algorithm": self.algorithm,
             "built_count": built_count,
