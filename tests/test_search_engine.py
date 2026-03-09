@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from index_all.main import iter_supported_files, process_collection, process_file
 from index_all.semantics.search_engine import search_collection, search_file
 
@@ -24,8 +26,10 @@ def test_search_collection_returns_hits_with_heading_and_locator():
         assert top_result["file_name"] == "norma.docx"
         assert top_result["document_archetype"] == "legislation_normative"
         assert top_result["heading"]
+        assert top_result["heading_path_text"]
         assert top_result["locator"]["inciso"] == "Inciso I"
         assert top_result["score"] > 0
+        assert top_result["score_breakdown"]
 
 
 def test_search_collection_supports_archetype_filter():
@@ -49,6 +53,7 @@ def test_search_collection_supports_archetype_filter():
         assert result["results"]
         assert {item["document_archetype"] for item in result["results"]} == {"manual_procedural"}
         assert all(item["file_name"] == "manual.docx" for item in result["results"])
+        assert all(item["heading_path_text"] for item in result["results"])
 
 
 def test_search_file_searches_single_processed_output_dir():
@@ -61,3 +66,21 @@ def test_search_file_searches_single_processed_output_dir():
         assert result["results"]
         assert any(item["heading"].startswith("Art. 2º") for item in result["results"])
         assert all(item["file_name"] == "norma.docx" for item in result["results"])
+
+
+def test_search_index_deduplicates_redundant_records():
+    with workspace_test_dir() as temp_root:
+        source_dir = temp_root / "entrada"
+        source_dir.mkdir()
+        create_legal_docx(source_dir / "norma.docx")
+        create_manual_docx(source_dir / "manual.docx")
+
+        output_root = temp_root / "saida"
+        processed_output_dirs = [process_file(path, output_root) for path in iter_supported_files(source_dir)]
+        collection_dir = process_collection(source_dir, output_root, processed_output_dirs)
+
+        search_index = json.loads((collection_dir / "search_index.json").read_text(encoding="utf-8"))
+        metadata = search_index["metadata"]
+
+        assert metadata["raw_record_count"] > metadata["record_count"]
+        assert metadata["exact_duplicates_removed"] + metadata["near_duplicates_removed"] > 0

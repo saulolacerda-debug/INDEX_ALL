@@ -1584,6 +1584,17 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
         f"<li>{_collection_escape_html(item)}</li>"
         for item in (chunks.get("sample_headings", []) or [])[:8]
     ) or "<li>Sem preview de chunks.</li>"
+    retrieval_preview_list = "".join(
+        "<li>"
+        f"{_collection_escape_html(item.get('file_name'))} | "
+        f"{_collection_escape_html(item.get('document_archetype'))} | "
+        f"{_collection_escape_html(item.get('heading_path_text'))} | "
+        f"score={_collection_escape_html(item.get('score', 0))}"
+        f"{' | ' + _collection_escape_html(item.get('locator_path')) if item.get('locator_path') else ''}"
+        "</li>"
+        for item in (retrieval_preview.get("sample_chunks", []) or [])[:5]
+    ) or "<li>Sem preview de retrieval.</li>"
+    duplicates_removed = (search.get("exact_duplicates_removed", 0) or 0) + (search.get("near_duplicates_removed", 0) or 0)
 
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1703,6 +1714,7 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
       <div class="card"><strong>Blocos</strong><div>{_collection_escape_html(metadata.get('total_block_count', 0))}</div></div>
       <div class="card"><strong>Índice Mestre</strong><div>{_collection_escape_html(metadata.get('master_index_entry_count', 0))}</div></div>
       <div class="card"><strong>Search Index</strong><div>{_collection_escape_html(search.get('record_count', 0))}</div></div>
+      <div class="card"><strong>Deduplicados</strong><div>{_collection_escape_html(duplicates_removed)}</div></div>
       <div class="card"><strong>Chunks</strong><div>{_collection_escape_html(chunks.get('chunk_count', 0))}</div></div>
     </section>
 
@@ -1743,10 +1755,17 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
     <section class="section">
       <h2>Busca E Chunks</h2>
       <p><strong>Registros indexados para busca:</strong> {_collection_escape_html(search.get('record_count', 0))}</p>
+      <p><strong>Registros brutos antes da deduplicação:</strong> {_collection_escape_html(search.get('raw_record_count', search.get('record_count', 0)))}</p>
+      <p><strong>Duplicatas removidas:</strong> {_collection_escape_html(duplicates_removed)}</p>
       <p><strong>Chunks semânticos:</strong> {_collection_escape_html(chunks.get('chunk_count', 0))}</p>
       <p><strong>Filtros suportados:</strong> {_collection_escape_html(', '.join(search.get('supported_filters', []) or retrieval_preview.get('supported_filters', []) or []))}</p>
+      <p><strong>Embeddings persistidos:</strong> {_collection_escape_html((chunks.get('metadata', {}) or {}).get('embedding_count', 0))}</p>
       <ul>
         {sample_chunk_list}
+      </ul>
+      <h3>Preview De Retrieval</h3>
+      <ul>
+        {retrieval_preview_list}
       </ul>
     </section>
   </div>

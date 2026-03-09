@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from index_all.main import process_file
+from index_all.indexing.structure_indexer import build_structure_index
+from index_all.parsers.pdf_parser import build_blocks_from_page_texts
 from index_all.semantics.chunker import build_document_chunks
 from index_all.semantics.search_engine import load_processed_document
 
-from tests.helpers import create_amending_docx, create_legal_docx, create_manual_docx, workspace_test_dir
+from tests.helpers import PROCEDURAL_PDF_CHUNK_LINES, create_amending_docx, create_legal_docx, create_manual_docx, workspace_test_dir
 
 
 def test_chunker_builds_normative_chunks_by_article_with_locator_and_heading_path():
@@ -54,3 +56,30 @@ def test_chunker_builds_manual_chunks_by_section_or_step():
         assert objetivos_chunk["document_archetype"] == "manual_procedural"
         assert objetivos_chunk["locator"]["line_start"] is not None
         assert objetivos_chunk["heading_path"][-1] == "Objetivos"
+
+
+def test_chunker_splits_procedural_pdf_chunks_by_step_and_demotes_interface_context():
+    blocks, _ = build_blocks_from_page_texts(
+        [
+            "\n".join(PROCEDURAL_PDF_CHUNK_LINES)
+        ]
+    )
+    processed_document = {
+        "metadata": {"file_name": "manual.pdf", "file_type": "pdf"},
+        "content": {
+            "blocks": blocks,
+            "document_archetype": "manual_procedural",
+            "document_profile": {"primary_structure": "structured_manual"},
+        },
+        "index": build_structure_index(blocks, document_archetype="manual_procedural"),
+        "output_dir": "",
+    }
+
+    chunks = build_document_chunks(processed_document)
+    heading_paths = [chunk["heading_path_text"] for chunk in chunks]
+
+    assert any(path.endswith("Etapa 1 - Receber arquivo") for path in heading_paths)
+    assert any(path.endswith("Etapa 2 - Conferir retorno") for path in heading_paths)
+    assert all("Portal TRIBUTOS SOBRE BENS E SERVIÇOS" not in path for path in heading_paths)
+    assert all(len(chunk["text"]) < 260 for chunk in chunks)
+    assert any((chunk.get("metadata", {}) or {}).get("interface_context") == "Portal TRIBUTOS SOBRE BENS E SERVIÇOS" for chunk in chunks)

@@ -90,6 +90,17 @@ AMENDING_SCOPE_SAMPLE_LINES = (
     "Art. 2º Esta Emenda Constitucional entra em vigor na data de sua publicação.",
     "Art. 3º Revogam-se as disposições em contrário.",
 )
+PROCEDURAL_PDF_CHUNK_LINES = (
+    "MANUAL OPERACIONAL DE APURAÇÃO",
+    "Primeiros Passos",
+    "Procedimento",
+    "Etapa 1 - Receber arquivo",
+    "1º) Validar assinatura do XML recebido.",
+    "Portal TRIBUTOS SOBRE BENS E SERVIÇOS",
+    "Clique no botão Enviar",
+    "Etapa 2 - Conferir retorno",
+    "Verificar mensagens de erro e prosseguir.",
+)
 
 
 def create_legal_docx(path: Path) -> Path:

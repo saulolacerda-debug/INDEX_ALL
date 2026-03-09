@@ -19,6 +19,8 @@ from index_all.parsers.legal_structure import (
 PDF_HEADER_RE = re.compile(r"^\d+\s+N[úu]mero\s+\d+\s*[–-]\s*\d{2}/\d{2}/\d{4}$", re.IGNORECASE)
 PDF_PAGE_ONLY_RE = re.compile(r"^\d+$")
 MANUAL_TITLE_HINTS = ("manual", "procedimento", "passo a passo", "guia")
+MANUAL_STRUCTURE_HINTS = ("objetivos", "passos", "procedimento", "etapa", "etapas", "resumo")
+MANUAL_OPERATION_HINTS = ("clique", "portal", "botão", "botao", "tela", "simulador")
 
 
 def _is_ignorable_pdf_line(text: str) -> bool:
@@ -80,7 +82,10 @@ def _build_page_blocks(page_texts: list[str]) -> list[dict]:
 
 def _should_prefer_manual(record_texts: list[str]) -> bool:
     early_text = " ".join(normalize_text(text).lower() for text in record_texts[:10])
-    return any(hint in early_text for hint in MANUAL_TITLE_HINTS)
+    title_hits = sum(1 for hint in MANUAL_TITLE_HINTS if hint in early_text)
+    structure_hits = sum(1 for hint in MANUAL_STRUCTURE_HINTS if hint in early_text)
+    operation_hits = sum(1 for hint in MANUAL_OPERATION_HINTS if hint in early_text)
+    return title_hits >= 1 or structure_hits >= 2 or (structure_hits >= 1 and operation_hits >= 2)
 
 
 def build_blocks_from_page_texts(page_texts: list[str]) -> tuple[list[dict], str]:

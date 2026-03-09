@@ -98,6 +98,7 @@ STEP_HEADING_RE = re.compile(
 )
 LETTERED_LIST_RE = re.compile(r"^(?P<identifier>[a-z])\)\s+(?P<body>.+)$", re.IGNORECASE)
 NUMBERED_LIST_RE = re.compile(r"^(?P<identifier>\d+)[\.\)-]\s+(?P<body>.+)$")
+ORDINAL_LIST_RE = re.compile(r"^(?P<identifier>\d+(?:º|°|o)?)\s*[\)\-–]\s+(?P<body>.+)$", re.IGNORECASE)
 INTERFACE_LABEL_RE = re.compile(
     r"^(?:portal|painel|menu|aba|bot[aã]o|campo|tela|filtro|consulta|op[cç][aã]o|minhas apura[cç][oõ]es)\b",
     re.IGNORECASE,
@@ -496,7 +497,7 @@ def _is_manual_list_item(text: str) -> bool:
     cleaned = clean_label_text(text)
     if LETTERED_LIST_RE.match(cleaned):
         return True
-    match = NUMBERED_LIST_RE.match(cleaned)
+    match = NUMBERED_LIST_RE.match(cleaned) or ORDINAL_LIST_RE.match(cleaned)
     if not match:
         return False
     body = normalize_text(match.group("body"))
@@ -717,10 +718,9 @@ def classify_manual_text(
 
     if _is_manual_interface_heading(cleaned):
         return Classification(
-            kind="heading",
+            kind="paragraph",
             title=make_preview_title(cleaned, max_length=120),
-            heading_level=4,
-            group="interface",
+            group="interface_label",
         )
 
     if _is_manual_micro_action(cleaned):
@@ -1022,7 +1022,7 @@ def build_manual_blocks(records: Sequence[StructuredTextRecord]) -> list[dict]:
             block_idx += 1
             continue
 
-        if classification.group in {"list_item", "micro_action"}:
+        if classification.group in {"list_item", "micro_action", "interface_label"}:
             flush_paragraph_buffer()
             append_single_paragraph(record, classification.group)
             continue

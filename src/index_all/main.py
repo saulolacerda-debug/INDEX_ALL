@@ -146,6 +146,7 @@ def process_collection(
         json_payloads["retrieval_preview.json"] = retrieval_preview
         semantic_payload["chunks"] = {
             "chunk_count": chunk_payload.get("chunk_count", 0),
+            "metadata": dict(chunk_payload.get("metadata", {}) or {}),
             "sample_headings": [
                 chunk.get("heading_path_text")
                 for chunk in (chunk_payload.get("records", []) or [])[:10]
@@ -160,8 +161,7 @@ def process_collection(
         search_index = build_search_index(processed_documents, catalog, master_index)
         json_payloads["search_index.json"] = search_index
         semantic_payload["search"] = {
-            "record_count": search_index.get("metadata", {}).get("record_count", 0),
-            "supported_filters": search_index.get("metadata", {}).get("supported_filters", []),
+            **dict(search_index.get("metadata", {}) or {}),
         }
         collection_metadata.setdefault("available_artifacts", {})["search_index"] = "search_index.json"
 

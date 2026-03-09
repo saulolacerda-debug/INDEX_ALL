@@ -90,6 +90,24 @@ def _collect_chunk_text(block_by_position: dict[int, dict], positions: Sequence[
     return "\n\n".join(texts).strip(), blocks
 
 
+def _resolved_heading_path_text(heading_path: Sequence[str], fallback_title: str | None = None) -> str:
+    normalized = [str(part).strip() for part in heading_path if str(part).strip()]
+    if normalized:
+        return " > ".join(normalized)
+    return str(fallback_title or "").strip()
+
+
+def _resolved_locator_path(locator: dict, heading_path: Sequence[str], fallback_title: str | None = None) -> str | None:
+    locator_path = format_locator_path(locator)
+    if locator_path:
+        return locator_path
+    position_text = format_position(locator)
+    if position_text:
+        return position_text
+    heading_path_text = _resolved_heading_path_text(heading_path, fallback_title=fallback_title)
+    return heading_path_text or None
+
+
 def _first_available_locator(entry: dict, blocks: Sequence[dict]) -> dict:
     locator = dict(entry.get("locator", {}) or {})
     if any(locator.values()):
@@ -120,6 +138,8 @@ def _chunk_record(
 
     locator = _first_available_locator(root_entry, chunk_blocks)
     archetype = content.get("document_archetype") or metadata.get("document_archetype") or "generic_document"
+    heading_path_text = _resolved_heading_path_text(heading_path, fallback_title=root_entry.get("title"))
+    locator_path = _resolved_locator_path(locator, heading_path, fallback_title=root_entry.get("title"))
 
     chunk = {
         "chunk_id": f"chunk_{chunk_index:05d}",
@@ -130,22 +150,25 @@ def _chunk_record(
         "output_dir": str(processed_document.get("output_dir") or ""),
         "heading": root_entry.get("title"),
         "heading_path": heading_path,
-        "heading_path_text": " > ".join(heading_path),
+        "heading_path_text": heading_path_text,
         "text": text,
         "locator": locator,
-        "locator_path": format_locator_path(locator),
+        "locator_path": locator_path,
         "position_text": format_position(locator),
         "metadata": {
             "kind": root_entry.get("kind"),
             "level": root_entry.get("level"),
             "block_positions": list(sorted(set(int(pos) for pos in positions))),
             "primary_structure": content.get("document_profile", {}).get("primary_structure"),
+            "text_length": len(text),
         },
         "embedding": None,
     }
 
     if root_context:
         chunk["metadata"]["root_context"] = root_context
+        for key, value in root_context.items():
+            chunk["metadata"].setdefault(key, value)
 
     return chunk
 
@@ -220,6 +243,149 @@ def _manual_chunk_roots(flat_entries: list[dict], block_by_position: dict[int, d
     return selected or [item for item in flat_entries if item["entry"].get("kind") == "heading"]
 
 
+def _manual_heading_level(block: dict) -> int:
+    extra = block.get("extra", {}) or {}
+    level = extra.get("heading_level")
+    return level if isinstance(level, int) else 1
+
+
+def _manual_heading_group(block: dict) -> str:
+    extra = block.get("extra", {}) or {}
+    return str(extra.get("heading_group") or extra.get("manual_group") or "")
+
+
+def _manual_is_interface_heading(block: dict) -> bool:
+    return _manual_heading_group(block) == "interface"
+
+
+def _manual_is_leaf_heading(blocks: Sequence[dict], start_position: int) -> bool:
+    current_block = blocks[start_position - 1]
+    current_level = _manual_heading_level(current_block)
+
+    for next_block in blocks[start_position:]:
+        if next_block.get("kind") != "heading":
+            continue
+        if _manual_is_interface_heading(next_block):
+            continue
+        next_level = _manual_heading_level(next_block)
+        if next_level > current_level:
+            return False
+        return True
+
+    return True
+
+
+def _build_manual_chunks(processed_document: dict, *, start_index: int) -> list[dict]:
+    content = dict(processed_document.get("content", {}) or {})
+    blocks = list(content.get("blocks", []) or [])
+    heading_stack: list[dict] = []
+    current_interface: dict | None = None
+    heading_infos: list[dict] = []
+    covered_heading_positions: set[int] = set()
+    chunks: list[dict] = []
+    chunk_index = start_index
+
+    def current_heading_path() -> list[str]:
+        return [str(item.get("title") or "").strip() for item in heading_stack if str(item.get("title") or "").strip()]
+
+    for position, block in enumerate(blocks, start=1):
+        kind = block.get("kind")
+        extra = block.get("extra", {}) or {}
+        if kind == "heading":
+            level = _manual_heading_level(block)
+            title = str(block.get("display_title") or block.get("title") or "").strip()
+            group = _manual_heading_group(block)
+            heading_stack = [item for item in heading_stack if int(item.get("level") or 0) < level]
+            if _manual_is_interface_heading(block):
+                current_interface = {"title": title, "level": level, "position": position}
+                continue
+
+            current_interface = None
+            heading_info = {
+                "title": title,
+                "level": level,
+                "position": position,
+                "group": group,
+                "path": current_heading_path() + ([title] if title else []),
+            }
+            heading_stack.append(heading_info)
+            heading_infos.append(heading_info)
+            continue
+
+        if kind != "paragraph":
+            continue
+
+        manual_group = str(extra.get("manual_group") or "body")
+        if manual_group == "overview":
+            continue
+        if manual_group == "interface_label":
+            current_interface = {
+                "title": str(block.get("display_title") or block.get("title") or block.get("text") or "").strip(),
+                "position": position,
+            }
+
+        heading_path = current_heading_path()
+        if not heading_path:
+            fallback_title = str(block.get("display_title") or block.get("title") or f"Bloco {position}")
+            heading_path = [fallback_title]
+
+        if heading_stack:
+            covered_heading_positions.add(int(heading_stack[-1]["position"]))
+
+        root_context = {"manual_group": manual_group}
+        if current_interface and current_interface.get("title"):
+            root_context["interface_context"] = current_interface["title"]
+
+        root_title = heading_path[-1]
+        pseudo_entry = {
+            "id": block.get("id"),
+            "title": root_title,
+            "kind": "paragraph" if manual_group in {"interface_label", "list_item", "micro_action"} else "heading",
+            "level": len(heading_path),
+            "locator": dict(block.get("locator", {}) or {}),
+        }
+        chunk = _chunk_record(
+            chunk_index=chunk_index,
+            processed_document=processed_document,
+            root_entry=pseudo_entry,
+            heading_path=heading_path,
+            positions=(position,),
+            root_context=root_context,
+        )
+        if chunk:
+            chunks.append(chunk)
+            chunk_index += 1
+
+    for heading_info in heading_infos:
+        if heading_info["position"] in covered_heading_positions:
+            continue
+        if heading_info["group"] in {"document_title", "styled_heading"}:
+            continue
+        if not _manual_is_leaf_heading(blocks, int(heading_info["position"])):
+            continue
+        heading_block = blocks[int(heading_info["position"]) - 1]
+        pseudo_entry = {
+            "id": heading_block.get("id"),
+            "title": heading_info["title"],
+            "kind": heading_block.get("kind"),
+            "level": heading_info["level"],
+            "locator": dict(heading_block.get("locator", {}) or {}),
+        }
+        chunk = _chunk_record(
+            chunk_index=chunk_index,
+            processed_document=processed_document,
+            root_entry=pseudo_entry,
+            heading_path=list(heading_info["path"] or []),
+            positions=(int(heading_info["position"]),),
+            root_context={"manual_group": heading_info["group"] or "heading_only"},
+        )
+        if chunk:
+            chunks.append(chunk)
+            chunk_index += 1
+
+    return chunks
+
+
 def _generic_chunks_from_blocks(processed_document: dict, *, start_index: int) -> list[dict]:
     metadata = dict(processed_document.get("metadata", {}) or {})
     content = dict(processed_document.get("content", {}) or {})
@@ -248,16 +414,24 @@ def _generic_chunks_from_blocks(processed_document: dict, *, start_index: int) -
                 "output_dir": str(processed_document.get("output_dir") or ""),
                 "heading": group[0][1].get("display_title") or group[0][1].get("title"),
                 "heading_path": list(group[0][1].get("hierarchy_path") or []),
-                "heading_path_text": " > ".join(group[0][1].get("hierarchy_path") or []),
+                "heading_path_text": _resolved_heading_path_text(
+                    list(group[0][1].get("hierarchy_path") or []),
+                    fallback_title=group[0][1].get("display_title") or group[0][1].get("title"),
+                ),
                 "text": text,
                 "locator": locator,
-                "locator_path": format_locator_path(locator),
+                "locator_path": _resolved_locator_path(
+                    locator,
+                    list(group[0][1].get("hierarchy_path") or []),
+                    fallback_title=group[0][1].get("display_title") or group[0][1].get("title"),
+                ),
                 "position_text": format_position(locator),
                 "metadata": {
                     "kind": "block_group",
                     "level": 1,
                     "block_positions": positions,
                     "primary_structure": content.get("document_profile", {}).get("primary_structure"),
+                    "text_length": len(text),
                 },
                 "embedding": None,
             }
@@ -279,16 +453,24 @@ def _generic_chunks_from_blocks(processed_document: dict, *, start_index: int) -
                 "output_dir": str(processed_document.get("output_dir") or ""),
                 "heading": group[0][1].get("display_title") or group[0][1].get("title"),
                 "heading_path": list(group[0][1].get("hierarchy_path") or []),
-                "heading_path_text": " > ".join(group[0][1].get("hierarchy_path") or []),
+                "heading_path_text": _resolved_heading_path_text(
+                    list(group[0][1].get("hierarchy_path") or []),
+                    fallback_title=group[0][1].get("display_title") or group[0][1].get("title"),
+                ),
                 "text": text,
                 "locator": locator,
-                "locator_path": format_locator_path(locator),
+                "locator_path": _resolved_locator_path(
+                    locator,
+                    list(group[0][1].get("hierarchy_path") or []),
+                    fallback_title=group[0][1].get("display_title") or group[0][1].get("title"),
+                ),
                 "position_text": format_position(locator),
                 "metadata": {
                     "kind": "block_group",
                     "level": 1,
                     "block_positions": positions,
                     "primary_structure": content.get("document_profile", {}).get("primary_structure"),
+                    "text_length": len(text),
                 },
                 "embedding": None,
             }
@@ -315,6 +497,9 @@ def build_document_chunks(processed_document: dict, *, start_index: int = 1) -> 
     elif archetype == "legislation_amending_act":
         selected_roots = _amending_chunk_roots(flat_entries, index_entries)
     elif archetype == "manual_procedural":
+        manual_chunks = _build_manual_chunks(processed_document, start_index=start_index)
+        if manual_chunks:
+            return manual_chunks
         selected_roots = _manual_chunk_roots(flat_entries, block_by_position)
     else:
         selected_roots = [item for item in flat_entries if item["entry"].get("kind") == "heading"]

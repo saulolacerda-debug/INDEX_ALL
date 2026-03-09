@@ -260,16 +260,40 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
         lines.extend(["## Busca E Chunks", ""])
         search = semantic.get("search", {})
         chunks = semantic.get("chunks", {})
+        retrieval_preview = semantic.get("retrieval_preview", {})
         if search:
             lines.append(f"- Registros no search index: `{search.get('record_count', 0)}`")
+            raw_record_count = search.get("raw_record_count")
+            if raw_record_count:
+                lines.append(f"- Registros brutos antes da deduplicação: `{raw_record_count}`")
+            duplicates_removed = (search.get("exact_duplicates_removed", 0) or 0) + (search.get("near_duplicates_removed", 0) or 0)
+            if duplicates_removed:
+                lines.append(f"- Duplicatas removidas: `{duplicates_removed}`")
             supported_filters = search.get("supported_filters", []) or []
             if supported_filters:
                 lines.append(f"- Filtros suportados: `{', '.join(supported_filters)}`")
         if chunks:
             lines.append(f"- Chunks gerados: `{chunks.get('chunk_count', 0)}`")
+            chunk_metadata = chunks.get("metadata", {}) or {}
+            embedding_count = chunk_metadata.get("embedding_count")
+            if embedding_count is not None:
+                lines.append(f"- Chunks com embedding persistido: `{embedding_count}`")
             sample_headings = chunks.get("sample_headings", []) or []
             if sample_headings:
                 lines.append(f"- Primeiros chunks: `{' | '.join(sample_headings[:5])}`")
+        sample_chunks = retrieval_preview.get("sample_chunks", []) or []
+        if sample_chunks:
+            lines.append("- Preview de retrieval:")
+            for chunk in sample_chunks[:3]:
+                parts = [
+                    str(chunk.get("file_name") or ""),
+                    str(chunk.get("document_archetype") or ""),
+                    str(chunk.get("heading_path_text") or ""),
+                    f"score={chunk.get('score', 0)}",
+                ]
+                if chunk.get("locator_path"):
+                    parts.append(str(chunk["locator_path"]))
+                lines.append(f"  {' | '.join(part for part in parts if part)}")
         lines.append("")
 
     lines.extend(["## Resumo Consolidado", "", summary or "Sem resumo consolidado disponível.", ""])

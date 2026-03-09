@@ -26,7 +26,9 @@ def test_retrieve_context_returns_ranked_chunks_with_prompt_ready_context():
         assert first_chunk["file_name"] == "manual.docx"
         assert first_chunk["document_archetype"] == "manual_procedural"
         assert first_chunk["heading_path"]
+        assert first_chunk["heading_path_text"]
         assert first_chunk["locator"]["line_start"] is not None
+        assert first_chunk["score_breakdown"]
         assert "integridade" in retrieval["context_text"].lower()
         assert "manual.docx" in retrieval["context_text"]
 
@@ -52,8 +54,14 @@ def test_collection_outputs_include_search_index_chunks_and_retrieval_preview():
         assert search_index["metadata"]["record_count"] > 0
         assert chunks_payload["artifact_role"] == "local_embedding_store"
         assert chunks_payload["chunk_count"] > 0
+        assert "metadata" in chunks_payload
         assert retrieval_preview["artifact_role"] == "retrieval_preview"
         assert retrieval_preview["chunk_count"] == chunks_payload["chunk_count"]
+        assert retrieval_preview["sample_chunks"][0]["score"] >= 0
+        assert retrieval_preview["sample_chunks"][0]["score_breakdown"]
+        assert retrieval_preview["sample_chunks"][0]["heading_path_text"]
+        assert retrieval_preview["sample_chunks"][0]["locator"]
         assert "## Busca E Chunks" in collection_summary
         assert "Search Index" in collection_report
+        assert "Preview De Retrieval" in collection_report
         assert "Busca E Chunks" in collection_report
