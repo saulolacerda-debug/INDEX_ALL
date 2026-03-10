@@ -18,5 +18,15 @@
   "typescript.reportStyleChecksAsWarnings": false,
   "typescript.updateImportsOnFileMove.enabled": "always",
   "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.experimental.useTsgo": true
+  "typescript.experimental.useTsgo": true,
+  "chat.tools.terminal.autoApprove": {
+    "Write-Host": true,
+    "Get-Location": true,
+    "pnpm": true,
+    "bun": true,
+    "/^\\$ErrorActionPreference='Continue'; node -v; Write-Host \"NODE_EXIT:\\$LASTEXITCODE\"; node openclaw\\.mjs --version; Write-Host \"OPENCLAW_VERSION_EXIT:\\$LASTEXITCODE\"; node openclaw\\.mjs doctor --deep --non-interactive; Write-Host \"DOCTOR_EXIT:\\$LASTEXITCODE\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
 }
