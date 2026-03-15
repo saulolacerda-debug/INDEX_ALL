@@ -19,6 +19,9 @@ Thumbs.db
 # Generated data
 data/raw/*
 !data/raw/.gitkeep
+!data/raw/entrada_atual/
+data/raw/entrada_atual/*
+!data/raw/entrada_atual/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
 

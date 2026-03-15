@@ -78,6 +78,12 @@ INDEX_ALL
 │   ├── diagrams
 │   └── specs
 │
+├── scripts
+│   ├── New-Batch.ps1
+│   ├── Processar-Lote-Atual.ps1
+│   ├── Run-Batch.ps1
+│   └── Query-Collection.ps1
+│
 ├── src
 │   └── index_all
 │       ├── config.py
@@ -115,6 +121,77 @@ Execute sobre um arquivo ou pasta:
 ```powershell
 python -m index_all.main "C:\AI_PROJECTS\INDEX_ALL\data\samples"
 ```
+
+## Fluxo mais simples para operar
+
+Se voce quer copiar os arquivos e rodar um unico comando, use a pasta fixa:
+
+```text
+data\raw\entrada_atual
+```
+
+Fluxo:
+
+1. Copie para `data\raw\entrada_atual` somente os arquivos do lote atual.
+
+2. Rode:
+
+```powershell
+.\scripts\Processar-Lote-Atual.ps1 -Name clientes_marco
+```
+
+O script:
+
+- cria um lote com timestamp dentro de `data\raw`
+- move os arquivos de `entrada_atual` para esse lote
+- processa o lote em `data\processed`
+- deixa `entrada_atual` vazia e pronta para o proximo uso
+
+Exemplo de resultado:
+
+```text
+data\raw\entrada_atual
+data\raw\2026-03-15_201500_clientes_marco
+data\processed\2026-03-15_201500_clientes_marco_collection
+```
+
+## Fluxo recomendado por lote
+
+Para manter rastreabilidade, evitar mistura entre execucoes e permitir consultas futuras,
+o fluxo recomendado e criar uma pasta nova para cada lote dentro de `data\raw`.
+
+1. Crie um lote novo:
+
+```powershell
+.\scripts\New-Batch.ps1 -Name clientes_marco
+```
+
+O script cria uma pasta como:
+
+```text
+data\raw\2026-03-15_101500_clientes_marco
+```
+
+2. Copie para essa pasta os arquivos que pertencem somente a esse lote.
+
+3. Processe o lote com embeddings locais:
+
+```powershell
+.\scripts\Run-Batch.ps1 -BatchName 2026-03-15_101500_clientes_marco
+```
+
+4. Consulte a colecao depois, sem reprocessar:
+
+```powershell
+.\scripts\Query-Collection.ps1 -CollectionName 2026-03-15_101500_clientes_marco_collection -Query "nota cancelada"
+```
+
+Observacoes:
+
+- `Run-Batch.ps1` usa `--build-embeddings` por padrao. Use `-NoEmbeddings` se quiser somente busca textual.
+- `Run-Batch.ps1` sem `-BatchName` pega o lote mais recente em `data\raw`.
+- `Query-Collection.ps1` sem `-CollectionName` consulta a colecao mais recente em `data\processed`.
+- A saida continua na mesma raiz `data\processed`, mas organizada por lote, preservando historico.
 
 ## Exemplo de resultado
 
