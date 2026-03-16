@@ -38,7 +38,7 @@ from tests.helpers import AMENDING_SCOPE_SAMPLE_LINES, NORMATIVE_WITH_FINAL_AMEN
         (
             {"file_name": "balancete.csv", "file_stem": "balancete", "file_type": "csv", "source_path": "balancete.csv"},
             [{"kind": "table_header", "title": "Header", "text": "Conta | Valor"}],
-            {"mode": "table_preview"},
+            {"mode": "table_full"},
             "spreadsheet_structured",
         ),
         (

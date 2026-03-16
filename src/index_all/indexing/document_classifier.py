@@ -275,7 +275,7 @@ def classify_document_archetype(
 
     if (
         file_type in {"csv", "xlsx"}
-        or parser_mode in {"table_preview", "sheet_preview"}
+        or parser_mode in {"table_preview", "sheet_preview", "table_full", "sheet_full"}
         or bool(block_kinds & SPREADSHEET_KINDS)
     ):
         return "spreadsheet_structured"
