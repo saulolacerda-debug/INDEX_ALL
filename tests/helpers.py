@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import csv
 import shutil
 from contextlib import contextmanager
@@ -218,6 +219,14 @@ def create_manual_docx(path: Path) -> Path:
             paragraph.style = style_name
 
     document.save(path)
+    return path
+
+
+def create_png_stub(path: Path) -> Path:
+    png_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j3ioAAAAASUVORK5CYII="
+    )
+    path.write_bytes(png_bytes)
     return path
 
 

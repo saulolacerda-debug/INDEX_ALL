@@ -6,6 +6,7 @@ from typing import Callable
 from index_all.parsers.csv_parser import parse_csv
 from index_all.parsers.docx_parser import parse_docx
 from index_all.parsers.html_parser import parse_html
+from index_all.parsers.image_parser import parse_image
 from index_all.parsers.ofx_parser import parse_ofx
 from index_all.parsers.pdf_parser import parse_pdf
 from index_all.parsers.txt_parser import parse_txt
@@ -21,9 +22,16 @@ PARSER_MAP: dict[str, ParserFunc] = {
     ".docx": parse_docx,
     ".htm": parse_html,
     ".html": parse_html,
+    ".jpg": parse_image,
+    ".jpeg": parse_image,
     ".ofx": parse_ofx,
+    ".png": parse_image,
     ".pdf": parse_pdf,
+    ".bmp": parse_image,
+    ".tif": parse_image,
+    ".tiff": parse_image,
     ".txt": parse_txt,
+    ".webp": parse_image,
     ".xlsx": parse_xlsx,
     ".xml": parse_xml,
 }

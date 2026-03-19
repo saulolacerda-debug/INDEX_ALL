@@ -15,6 +15,11 @@ Arquivos-alvo do núcleo atual:
 - PDF
 - DOCX
 - XLSX
+- PNG
+- JPG/JPEG
+- TIFF/TIF
+- BMP
+- WEBP
 - XML
 - HTML
 - CSV
@@ -114,6 +119,52 @@ Instale as dependências e o pacote em modo editável:
 python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 pip install -e .
+```
+
+## OCR de imagens
+
+O projeto agora processa imagens com OCR nativo para:
+
+- `png`
+- `jpg`
+- `jpeg`
+- `tif`
+- `tiff`
+- `bmp`
+- `webp`
+
+Estratégia de OCR:
+
+1. `Azure AI Vision READ` quando configurado
+2. `RapidOCR` como fallback local
+3. `Tesseract` como fallback adicional
+
+Configuracao opcional por variaveis de ambiente:
+
+```powershell
+$env:INDEX_ALL_OCR_PROVIDER="auto"
+$env:INDEX_ALL_OCR_LANGUAGE="pt,en"
+$env:INDEX_ALL_AZURE_VISION_ENDPOINT="https://<seu-recurso>.cognitiveservices.azure.com/"
+$env:INDEX_ALL_AZURE_VISION_KEY="<sua-chave>"
+```
+
+Se quiser forcar um motor especifico:
+
+```powershell
+$env:INDEX_ALL_OCR_PROVIDER="azure_vision"
+```
+
+ou
+
+```powershell
+$env:INDEX_ALL_OCR_PROVIDER="rapidocr"
+```
+
+ou
+
+```powershell
+$env:INDEX_ALL_OCR_PROVIDER="tesseract"
+$env:INDEX_ALL_TESSERACT_CMD="C:\Program Files\Tesseract-OCR\tesseract.exe"
 ```
 
 Execute sobre um arquivo ou pasta:
