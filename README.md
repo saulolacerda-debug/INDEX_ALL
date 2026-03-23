@@ -78,6 +78,7 @@ INDEX_ALL
 │
 ├── docs
 │   ├── PRD_MVP.md
+│   ├── MANUTENCAO.md
 │   ├── SCHEMA_UNIVERSAL.json
 │   ├── decisions
 │   ├── diagrams
