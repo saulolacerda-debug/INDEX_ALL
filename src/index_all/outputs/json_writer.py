@@ -7,6 +7,7 @@ from typing import Mapping
 
 COMPACT_JSON_FILE_NAMES = {
     "ai_context.json",
+    "answer_results.json",
     "catalog.json",
     "collection_metadata.json",
     "content.json",

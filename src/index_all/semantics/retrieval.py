@@ -7,6 +7,7 @@ from index_all.indexing.consultation_payload import format_locator_path, format_
 from index_all.outputs.json_writer import read_json
 from index_all.semantics.chunker import build_collection_chunks
 from index_all.semantics.embedding_store import LocalEmbeddingStore, build_local_embedding, cosine_similarity
+from index_all.semantics.ranking_profiles import DEFAULT_RANKING_PROFILE, normalize_ranking_profile
 from index_all.semantics.reranker import rerank_candidates
 from index_all.semantics.search_engine import _snippet, load_processed_document, query_tokens, score_text_match
 
@@ -74,7 +75,9 @@ def search_chunks(
     filters: Mapping[str, Any] | None = None,
     limit: int = 6,
     min_vector_score: float = 0.12,
+    ranking_profile: str = DEFAULT_RANKING_PROFILE,
 ) -> list[dict]:
+    normalized_profile = normalize_ranking_profile(ranking_profile)
     query_vector = _query_embedding(chunks, query)
     candidates: list[dict] = []
 
@@ -91,6 +94,7 @@ def search_chunks(
             file_name=str(chunk.get("file_name") or ""),
             document_archetype=str(chunk.get("document_archetype") or ""),
             source_kind=str(chunk.get("source_kind") or "chunk"),
+            ranking_profile=normalized_profile,
         )
         text_score = float(text_match["score"])
         vector_score = cosine_similarity(query_vector, chunk.get("embedding")) if query_vector else 0.0
@@ -116,12 +120,26 @@ def search_chunks(
             }
         )
 
-    return rerank_candidates(query, candidates, limit=limit)
+    return rerank_candidates(query, candidates, limit=limit, ranking_profile=normalized_profile)
 
 
-def retrieve_context(query: str, collection_dir: str | Path, filters: Mapping[str, Any] | None = None, limit: int = 6) -> dict:
+def retrieve_context(
+    query: str,
+    collection_dir: str | Path,
+    filters: Mapping[str, Any] | None = None,
+    limit: int = 6,
+    *,
+    ranking_profile: str = DEFAULT_RANKING_PROFILE,
+) -> dict:
     resolved_dir = Path(collection_dir)
-    ranked_chunks = search_chunks(query, _load_chunks(resolved_dir), filters=filters, limit=limit)
+    normalized_profile = normalize_ranking_profile(ranking_profile)
+    ranked_chunks = search_chunks(
+        query,
+        _load_chunks(resolved_dir),
+        filters=filters,
+        limit=limit,
+        ranking_profile=normalized_profile,
+    )
 
     context_lines: list[str] = []
     for index, chunk in enumerate(ranked_chunks, start=1):
@@ -148,6 +166,7 @@ def retrieve_context(query: str, collection_dir: str | Path, filters: Mapping[st
         "chunks": ranked_chunks,
         "context_text": "\n".join(context_lines).strip(),
         "mode": "hybrid" if any(chunk.get("retrieval_mode") == "hybrid" for chunk in ranked_chunks) else "textual",
+        "ranking_profile": normalized_profile,
     }
 
 
@@ -201,14 +220,15 @@ def _default_preview_queries(chunks: Sequence[Mapping[str, Any]], *, limit: int 
     return queries or ["documento"]
 
 
-def build_retrieval_preview(chunks: Sequence[dict]) -> dict:
+def build_retrieval_preview(chunks: Sequence[dict], *, ranking_profile: str = DEFAULT_RANKING_PROFILE) -> dict:
+    normalized_profile = normalize_ranking_profile(ranking_profile)
     hydrated_chunks = [dict(chunk) for chunk in chunks]
     preview_queries = _default_preview_queries(hydrated_chunks)
     sample_queries: list[dict] = []
     sample_chunks_by_id: dict[str, dict] = {}
 
     for query in preview_queries:
-        results = search_chunks(query, hydrated_chunks, limit=3)
+        results = search_chunks(query, hydrated_chunks, limit=3, ranking_profile=normalized_profile)
         compact_results = [_compact_result(result) for result in results]
         if compact_results:
             sample_queries.append({"query": query, "results": compact_results})
@@ -240,6 +260,7 @@ def build_retrieval_preview(chunks: Sequence[dict]) -> dict:
         "mode": "hybrid_retrieval_ready" if embedding_count else "textual_retrieval_ready",
         "chunk_count": len(hydrated_chunks),
         "embedding_count": embedding_count,
+        "ranking_profile": normalized_profile,
         "supported_filters": ["document_archetype", "file_name", "file_type"],
         "preview_queries": preview_queries,
         "sample_queries": sample_queries,

@@ -113,9 +113,22 @@ def test_cli_help_mentions_hybrid_retrieval_options():
 
     assert "--build-embeddings" in help_text
     assert "--query" in help_text
+    assert "--answer" in help_text
     assert "--limit" in help_text
     assert "--archetype" in help_text
     assert "--file-name" in help_text
+    assert "--ranking-profile" in help_text
+
+
+def test_cli_parser_accepts_answer_and_ranking_profile():
+    parser = build_parser()
+
+    args = parser.parse_args(["colecao", "--query", "legalidade", "--answer", "--ranking-profile", "generic"])
+
+    assert args.input_path == "colecao"
+    assert args.query == "legalidade"
+    assert args.answer is True
+    assert args.ranking_profile == "generic"
 
 
 def test_score_text_match_prioritizes_exact_legal_reference_with_suffix():

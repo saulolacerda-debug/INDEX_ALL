@@ -263,6 +263,7 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
         embeddings = semantic.get("embeddings", {})
         retrieval_preview = semantic.get("retrieval_preview", {})
         query_results = semantic.get("query_results", {})
+        answer_results = semantic.get("answer_results", {})
         if search:
             lines.append(f"- Registros no search index: `{search.get('record_count', 0)}`")
             raw_record_count = search.get("raw_record_count")
@@ -293,6 +294,8 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
                 lines.append(f"- Algoritmo de embedding: `{embeddings.get('embedding_algorithm')}`")
         if retrieval_preview:
             lines.append(f"- Modo de retrieval: `{retrieval_preview.get('mode', 'textual_retrieval_ready')}`")
+            if retrieval_preview.get("ranking_profile"):
+                lines.append(f"- Perfil de ranking do preview: `{retrieval_preview.get('ranking_profile')}`")
             preview_queries = retrieval_preview.get("preview_queries", []) or []
             if preview_queries:
                 lines.append(f"- Queries de preview: `{' | '.join(preview_queries[:5])}`")
@@ -331,6 +334,8 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
         if query_results:
             lines.append(f"- Última consulta: `{query_results.get('query', '')}`")
             lines.append(f"- Hits retornados: `{query_results.get('total_hits', 0)}`")
+            if query_results.get("ranking_profile"):
+                lines.append(f"- Perfil de ranking da consulta: `{query_results.get('ranking_profile')}`")
             if query_results.get("results"):
                 lines.append("- Preview dos resultados da consulta:")
                 for item in (query_results.get("results", []) or [])[:3]:
@@ -343,6 +348,25 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
                     if item.get("locator_path"):
                         parts.append(str(item["locator_path"]))
                     lines.append(f"  {' | '.join(part for part in parts if part)}")
+        if answer_results:
+            lines.append(f"- Última resposta: status `{answer_results.get('status', 'unknown')}`")
+            if answer_results.get("query"):
+                lines.append(f"- Pergunta respondida: `{answer_results.get('query', '')}`")
+            if answer_results.get("ranking_profile"):
+                lines.append(f"- Perfil de ranking da resposta: `{answer_results.get('ranking_profile')}`")
+            if answer_results.get("provider"):
+                lines.append(f"- Provider: `{answer_results.get('provider')}`")
+            if answer_results.get("deployment"):
+                lines.append(f"- Deployment: `{answer_results.get('deployment')}`")
+            if answer_results.get("citation_count") is not None:
+                lines.append(f"- Citações usadas: `{answer_results.get('citation_count', 0)}`")
+            if answer_results.get("answer_preview"):
+                lines.append(f"- Preview da resposta: `{answer_results.get('answer_preview')}`")
+            citations = answer_results.get("citations", []) or []
+            if citations:
+                lines.append("- Citações da resposta:")
+                for item in citations[:3]:
+                    lines.append(f"  [{item.get('id')}] {item.get('reference')}")
         lines.append("")
 
     lines.extend(["## Resumo Consolidado", "", summary or "Sem resumo consolidado disponível.", ""])
@@ -354,6 +378,57 @@ def write_collection_summary_markdown(path: Path, collection_payload: dict) -> N
         _append_index_entries(lines, list(master_index))
     else:
         lines.append("- Sem entradas no índice mestre.")
+        lines.append("")
+
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_answer_results_markdown(path: Path, answer_payload: dict) -> None:
+    citations = list(answer_payload.get("citations", []) or [])
+    grounding = list(answer_payload.get("grounding", []) or [])
+    filters = dict(answer_payload.get("filters", {}) or {})
+
+    lines = [
+        f'# Resposta - "{answer_payload.get("query", "")}"',
+        "",
+        f"- Status: `{answer_payload.get('status', 'unknown')}`",
+        f"- Modo de retrieval: `{answer_payload.get('mode', 'textual')}`",
+        f"- Perfil de ranking: `{answer_payload.get('ranking_profile', 'legal')}`",
+        f"- Provider: `{answer_payload.get('provider', 'azure_openai')}`",
+        f"- Deployment: `{answer_payload.get('deployment', '')}`",
+    ]
+    if answer_payload.get("response_id"):
+        lines.append(f"- Response ID: `{answer_payload.get('response_id')}`")
+    if filters:
+        lines.append(
+            "- Filtros: "
+            + ", ".join(f"`{key}={value}`" for key, value in filters.items() if value not in (None, "", []))
+        )
+    lines.append("")
+
+    answer_markdown = str(answer_payload.get("answer_markdown") or "").strip()
+    answer_text = str(answer_payload.get("answer_text") or "").strip()
+    if answer_markdown:
+        lines.extend(["## Resposta", "", answer_markdown, ""])
+    elif answer_text:
+        lines.extend(["## Diagnóstico", "", answer_text, ""])
+
+    if citations:
+        lines.extend(["## Citações", ""])
+        for item in citations:
+            lines.append(f"- [{item.get('id')}] {item.get('reference')}")
+        lines.append("")
+
+    if grounding:
+        lines.extend(["## Grounding Utilizado", ""])
+        for item in grounding:
+            parts = [
+                f"[{item.get('id')}]",
+                str(item.get("reference") or ""),
+                f"score={item.get('score', 0)}",
+                str(item.get("retrieval_mode") or ""),
+            ]
+            lines.append(f"- {' | '.join(part for part in parts if part)}")
         lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")

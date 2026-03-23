@@ -1,37 +1,37 @@
 # ARCHITECTURE.md
 
-## Visão geral
+## Visao geral
 
-O INDEX_ALL é um motor universal de processamento de arquivos. A arquitetura foi desenhada para
-receber formatos diferentes, convertê-los para uma estrutura comum e gerar artefatos de saída
-padronizados.
+O INDEX_ALL e um motor universal de processamento de arquivos. A arquitetura foi desenhada para
+receber formatos diferentes, convertelos para uma estrutura comum, gerar artefatos de arquivo
+e, quando a entrada e uma pasta, consolidar busca e retrieval sobre a colecao.
 
 ## Pipeline principal
 
 ```text
-Entrada -> Detecção do tipo -> Parser -> Normalização -> Indexação -> Resumo -> Escrita de saída
+Entrada -> Deteccao do tipo -> Parser -> Normalizacao -> Indexacao -> Resumo -> Semantica -> Escrita de saida
 ```
 
 ## Camadas
 
-### 1. Ingestão
+### 1. Ingestao
 
 Responsabilidade:
 - receber um arquivo ou uma pasta
 - identificar o tipo do arquivo
 - encaminhar para o parser adequado
 
-Módulo principal:
+Modulo principal:
 - `src/index_all/ingestion/file_router.py`
 
 ### 2. Parsers
 
 Responsabilidade:
-- extrair o conteúdo bruto do arquivo
-- transformar o conteúdo em blocos estruturados
-- preservar metadados específicos do formato
+- extrair o conteudo bruto do arquivo
+- transformar o conteudo em blocos estruturados
+- preservar metadados especificos do formato
 
-Parsers previstos:
+Parsers principais:
 - `pdf_parser.py`
 - `docx_parser.py`
 - `xlsx_parser.py`
@@ -40,42 +40,57 @@ Parsers previstos:
 - `csv_parser.py`
 - `txt_parser.py`
 - `ofx_parser.py`
+- `image_parser.py`
 
-### 3. Indexação
+### 3. Indexacao
 
 Responsabilidade:
 - extrair metadados comuns
-- montar índice navegável
-- gerar resumo executivo inicial
+- montar indice navegavel
+- gerar resumo executivo
+- enriquecer o documento com payloads AI-ready
 
-Módulos:
+Modulos principais:
 - `metadata_extractor.py`
 - `structure_indexer.py`
 - `summary_builder.py`
+- `consultation_payload.py`
+- `catalog_builder.py`
+- `master_index_builder.py`
 
-### 4. Saída
+### 4. Semantica
+
+Responsabilidade:
+- suportar busca textual
+- gerar chunks para retrieval
+- persistir embeddings locais
+- combinar sinal textual e vetorial com reranking
+- gerar `retrieval_preview`, `query_results` e `answer_results`
+
+Modulos principais:
+- `search_engine.py`
+- `chunker.py`
+- `embedding_store.py`
+- `retrieval.py`
+- `reranker.py`
+- `query_interface.py`
+- `answering.py`
+
+### 5. Saida
 
 Responsabilidade:
 - escrever artefatos finais
-- manter formato consistente por arquivo processado
+- manter formato consistente por arquivo e por colecao
 
-Módulos:
+Modulos principais:
 - `json_writer.py`
 - `markdown_writer.py`
-
-### 5. Semântica
-
-Responsabilidade:
-- futuramente suportar busca textual e semântica
-- preparar integração com embeddings e RAG
-
-Módulo inicial:
-- `search_engine.py`
+- `html_writer.py`
 
 ## Schema universal
 
-O coração do sistema é um schema comum. Cada parser pode ter detalhes próprios, mas deve convergir
-para esta forma lógica:
+O coracao do sistema e um schema comum. Cada parser pode ter detalhes proprios, mas deve convergir
+para esta forma logica:
 
 ```json
 {
@@ -97,14 +112,14 @@ para esta forma lógica:
 
 ## Estrutura dos blocos
 
-Os parsers devem produzir blocos de conteúdo com estrutura semelhante a esta:
+Os parsers produzem blocos de conteudo com estrutura semelhante a esta:
 
 ```json
 {
   "id": "block_0001",
   "kind": "paragraph",
   "title": null,
-  "text": "conteúdo extraído",
+  "text": "conteudo extraido",
   "locator": {
     "page": 1,
     "sheet": null,
@@ -115,50 +130,92 @@ Os parsers devem produzir blocos de conteúdo com estrutura semelhante a esta:
 }
 ```
 
+## Artefatos por arquivo
+
+Cada arquivo processado gera:
+
+- `metadata.json`
+- `content.json`
+- `index.json`
+- `ai_context.json`
+- `ai_context.md`
+- `summary.md`
+- `report.html`
+
+## Artefatos por colecao
+
+Quando a entrada e uma pasta, o projeto pode gerar:
+
+- `catalog.json`
+- `master_index.json`
+- `collection_metadata.json`
+- `collection_summary.md`
+- `collection_report.html`
+- `search_index.json`
+- `chunks.json`
+- `embeddings_index.json`
+- `retrieval_preview.json`
+- `query_results.json`
+- `answer_results.json`
+- `answer_results.md`
+
 ## Regras arquiteturais
 
-1. O core não pode depender de uma lógica temática específica.
-2. Parsers não devem escrever arquivos diretamente.
-3. Saídas devem ser responsabilidade da camada `outputs`.
-4. Indexação deve depender do schema produzido pelos parsers.
-5. Especializações futuras devem entrar por extensão, não por contaminação do core.
+1. O core nao pode depender de uma logica tematica unica.
+2. Parsers nao devem escrever arquivos diretamente.
+3. Saidas devem ser responsabilidade da camada `outputs`.
+4. Indexacao deve depender do schema produzido pelos parsers.
+5. Semantica deve operar sobre artefatos processados e nao sobre parser side effects.
+6. Especializacoes futuras devem entrar por extensao, nao por contaminacao do core.
 
-## Organização por domínio futuro
+## Organizacao por dominio futuro
 
-Quando o núcleo estiver estabilizado, a evolução correta será por packs temáticos:
+Quando o nucleo estiver estabilizado, a evolucao correta continua sendo por packs tematicos:
 
 - `tax_pack`
 - `judicial_pack`
 - `accounting_pack`
 - `corporate_pack`
 
-Esses módulos poderão:
-- classificar entidades específicas
+Esses modulos poderao:
+- classificar entidades especificas
 - extrair campos especializados
-- aplicar taxonomias próprias
-- gerar relatórios temáticos
+- aplicar taxonomias proprias
+- gerar relatorios tematicos
 
-## Fluxo do MVP
+## Fluxo operacional atual
 
 ### Entrada
-- arquivo único
-- ou pasta com múltiplos arquivos
+- arquivo unico
+- ou pasta com multiplos arquivos
+- ou uma colecao ja processada para consulta
 
 ### Processamento por arquivo
-1. detectar extensão
+1. detectar extensao
 2. chamar parser
 3. extrair metadados comuns
-4. montar índice
+4. montar indice
 5. gerar resumo
-6. escrever `metadata.json`, `content.json`, `index.json`, `summary.md`
+6. escrever artefatos do arquivo
+
+### Consolidacao por colecao
+1. construir catalogo
+2. construir indice mestre
+3. gerar search index
+4. gerar chunks
+5. persistir embeddings locais quando solicitado
+6. gerar previews e artefatos de consulta/resposta
 
 ### Resultado
-Um diretório por arquivo processado em `data/processed`.
+Um diretorio por arquivo processado em `data/processed` e, para entradas em pasta, um diretorio
+de colecao com os artefatos consolidados.
 
-## Critério de sucesso do MVP
+## Criterio de sucesso da base atual
 
-O MVP é considerado válido quando:
-- processa ao menos um arquivo de cada tipo suportado
-- gera os quatro artefatos padrão
-- mantém estrutura consistente
-- falha de modo controlado quando o parser não consegue extrair tudo
+A base atual e considerada valida quando:
+
+- processa os tipos suportados com falha controlada
+- gera artefatos consistentes por arquivo
+- gera artefatos consolidados por colecao
+- suporta busca textual, retrieval hibrido e answer generation grounded
+- preserva compatibilidade com `python -m index_all.main` e com a CLI `index-all`

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from index_all.indexing.consultation_payload import format_locator_path, format_position
+from index_all.semantics.ranking_profiles import DEFAULT_RANKING_PROFILE, normalize_ranking_profile, uses_legal_reference_scoring
 
 SOURCE_KIND_PRIORITY = {
     "chunk": 6,
@@ -190,7 +191,9 @@ def score_text_match(
     file_name: str = "",
     document_archetype: str = "",
     source_kind: str = "",
+    ranking_profile: str = DEFAULT_RANKING_PROFILE,
 ) -> dict[str, Any]:
+    normalized_profile = normalize_ranking_profile(ranking_profile)
     normalized_query = normalize_text(query)
     if not normalized_query:
         return {"score": 0, "score_breakdown": {}}
@@ -229,31 +232,32 @@ def score_text_match(
     add("file_name_tokens", file_hits * 3)
     add("archetype_tokens", archetype_hits * 2)
 
-    legal_details = legal_reference_details(
-        query,
-        title=title,
-        heading_path=heading_path,
-        text=text,
-    )
-    add("legal_ref_title_exact", legal_details["title_exact"] * 26)
-    add("legal_ref_heading_exact", legal_details["heading_exact"] * 24)
-    add("legal_ref_body_exact", legal_details["body_exact"] * 8)
-    add("legal_ref_title_partial_penalty", legal_details["title_partial_only"] * -14)
-    add("legal_ref_heading_partial_penalty", legal_details["heading_partial_only"] * -12)
-    add("legal_ref_body_partial_penalty", legal_details["body_partial_only"] * -4)
-    primary_title_reference = extract_primary_legal_reference(title)
-    for query_reference in legal_details["query_references"]:
-        base_reference = query_reference.split("-", 1)[0]
-        if primary_title_reference == query_reference:
-            add("legal_ref_primary_title_exact", 42)
-        elif "-" in query_reference and primary_title_reference == base_reference:
-            add("legal_ref_primary_title_partial_penalty", -20)
+    if uses_legal_reference_scoring(normalized_profile):
+        legal_details = legal_reference_details(
+            query,
+            title=title,
+            heading_path=heading_path,
+            text=text,
+        )
+        add("legal_ref_title_exact", legal_details["title_exact"] * 26)
+        add("legal_ref_heading_exact", legal_details["heading_exact"] * 24)
+        add("legal_ref_body_exact", legal_details["body_exact"] * 8)
+        add("legal_ref_title_partial_penalty", legal_details["title_partial_only"] * -14)
+        add("legal_ref_heading_partial_penalty", legal_details["heading_partial_only"] * -12)
+        add("legal_ref_body_partial_penalty", legal_details["body_partial_only"] * -4)
+        primary_title_reference = extract_primary_legal_reference(title)
+        for query_reference in legal_details["query_references"]:
+            base_reference = query_reference.split("-", 1)[0]
+            if primary_title_reference == query_reference:
+                add("legal_ref_primary_title_exact", 42)
+            elif "-" in query_reference and primary_title_reference == base_reference:
+                add("legal_ref_primary_title_partial_penalty", -20)
 
     source_boost = SOURCE_KIND_SCORE_BOOST.get(source_kind, 0)
     if source_boost and (title_hits or heading_hits or body_hits or file_hits or normalized_query in body_text):
         add("source_kind", source_boost)
 
-    if document_archetype in SPECIALIZED_ARCHETYPES:
+    if normalized_profile == "legal" and document_archetype in SPECIALIZED_ARCHETYPES:
         add("archetype_specificity", 1)
 
     text_length = len(" ".join(str(text or "").split()))
@@ -286,6 +290,7 @@ def score_text_record(
     file_name: str = "",
     document_archetype: str = "",
     source_kind: str = "",
+    ranking_profile: str = DEFAULT_RANKING_PROFILE,
 ) -> int:
     return int(
         score_text_match(
@@ -296,6 +301,7 @@ def score_text_record(
             file_name=file_name,
             document_archetype=document_archetype,
             source_kind=source_kind,
+            ranking_profile=ranking_profile,
         )["score"]
     )
 
@@ -659,7 +665,15 @@ def _load_search_index(collection_dir: str | Path | None) -> dict:
     return build_search_index(processed_documents, catalog, master_index)
 
 
-def _search_records(query: str, records: Iterable[Mapping[str, Any]], *, filters: Mapping[str, Any] | None = None, limit: int = 10) -> list[dict]:
+def _search_records(
+    query: str,
+    records: Iterable[Mapping[str, Any]],
+    *,
+    filters: Mapping[str, Any] | None = None,
+    limit: int = 10,
+    ranking_profile: str = DEFAULT_RANKING_PROFILE,
+) -> list[dict]:
+    normalized_profile = normalize_ranking_profile(ranking_profile)
     results: list[dict] = []
 
     for record in records:
@@ -675,6 +689,7 @@ def _search_records(query: str, records: Iterable[Mapping[str, Any]], *, filters
             file_name=str(record.get("file_name") or ""),
             document_archetype=str(record.get("document_archetype") or ""),
             source_kind=str(record.get("source_kind") or ""),
+            ranking_profile=normalized_profile,
         )
         score = int(match["score"])
         if score <= 0:
@@ -724,6 +739,7 @@ def search_file(query: str, file_path: str | Path, limit: int = 10, filters: Map
         "query": query,
         "filters": dict(filters or {}),
         "total_hits": len(results),
+        "ranking_profile": DEFAULT_RANKING_PROFILE,
         "results": results,
     }
 
@@ -734,13 +750,16 @@ def search_collection(
     limit: int = 10,
     *,
     collection_dir: str | Path | None = None,
+    ranking_profile: str = DEFAULT_RANKING_PROFILE,
 ) -> dict:
     search_index = _load_search_index(collection_dir)
     records = list(search_index.get("records", []) or [])
-    results = _search_records(query, records, filters=filters, limit=limit)
+    normalized_profile = normalize_ranking_profile(ranking_profile)
+    results = _search_records(query, records, filters=filters, limit=limit, ranking_profile=normalized_profile)
     return {
         "query": query,
         "filters": dict(filters or {}),
         "total_hits": len(results),
+        "ranking_profile": normalized_profile,
         "results": results,
     }

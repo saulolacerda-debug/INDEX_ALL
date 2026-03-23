@@ -91,6 +91,7 @@ def test_collection_outputs_include_embeddings_and_enriched_retrieval_preview():
         assert embeddings_payload["metadata"]["embedding_state"] == "ready"
         assert retrieval_preview["artifact_role"] == "retrieval_preview"
         assert retrieval_preview["mode"] == "hybrid_retrieval_ready"
+        assert retrieval_preview["ranking_profile"] == "legal"
         assert retrieval_preview["chunk_count"] == chunks_payload["chunk_count"]
         assert retrieval_preview["sample_chunks"][0]["score"] >= 0
         assert retrieval_preview["sample_chunks"][0]["score_breakdown"]

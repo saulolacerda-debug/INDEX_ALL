@@ -3,7 +3,10 @@ param(
     [string]$CollectionName,
     [Parameter(Mandatory = $true)]
     [string]$Query,
+    [switch]$Answer,
     [int]$Limit = 10,
+    [ValidateSet("legal", "generic")]
+    [string]$RankingProfile = "legal",
     [string]$Archetype,
     [string]$FileName,
     [string]$FileType,
@@ -44,6 +47,25 @@ function Get-LatestCollectionDirectory {
         Select-Object -First 1
 }
 
+function Resolve-PythonExecutable {
+    param(
+        [string]$ProjectRoot
+    )
+
+    $candidates = @(
+        (Join-Path $ProjectRoot ".venv\Scripts\python.exe"),
+        (Join-Path $ProjectRoot ".venv/bin/python")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return (Get-Command python -ErrorAction Stop).Source
+}
+
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $defaultProcessedRoot = Join-Path $projectRoot "data\processed"
 $processedRoot = Resolve-WorkingPath -BasePath $projectRoot -Value $OutputDir
@@ -73,12 +95,17 @@ else {
     }
 }
 
-$pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
-if (-not (Test-Path $pythonExe)) {
-    $pythonExe = (Get-Command python -ErrorAction Stop).Source
-}
+$pythonExe = Resolve-PythonExecutable -ProjectRoot $projectRoot
 
-$cliArgs = @("-m", "index_all.main", $collectionItem.FullName, "--query", $Query, "--limit", $Limit)
+$cliArgs = @(
+    "-m", "index_all.main", $collectionItem.FullName,
+    "--query", $Query,
+    "--limit", $Limit,
+    "--ranking-profile", $RankingProfile
+)
+if ($Answer) {
+    $cliArgs += "--answer"
+}
 if (-not [string]::IsNullOrWhiteSpace($Archetype)) {
     $cliArgs += @("--archetype", $Archetype)
 }

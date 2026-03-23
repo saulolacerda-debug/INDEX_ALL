@@ -3,7 +3,10 @@ param(
     [string]$BatchName,
     [switch]$NoEmbeddings,
     [string]$Query,
+    [switch]$Answer,
     [int]$Limit = 10,
+    [ValidateSet("legal", "generic")]
+    [string]$RankingProfile = "legal",
     [string]$OutputDir
 )
 
@@ -69,6 +72,25 @@ function Get-LatestCollectionDirectory {
         Select-Object -First 1
 }
 
+function Resolve-PythonExecutable {
+    param(
+        [string]$ProjectRoot
+    )
+
+    $candidates = @(
+        (Join-Path $ProjectRoot ".venv\Scripts\python.exe"),
+        (Join-Path $ProjectRoot ".venv/bin/python")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return (Get-Command python -ErrorAction Stop).Source
+}
+
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $rawRoot = Join-Path $projectRoot "data\raw"
 $defaultProcessedRoot = Join-Path $projectRoot "data\processed"
@@ -109,17 +131,17 @@ else {
     $resolvedBatchName = $batchItem.Name
 }
 
-$pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
-if (-not (Test-Path $pythonExe)) {
-    $pythonExe = (Get-Command python -ErrorAction Stop).Source
-}
+$pythonExe = Resolve-PythonExecutable -ProjectRoot $projectRoot
 
 $cliArgs = @("-m", "index_all.main", $batchDir, "--output-dir", $processedRoot)
 if (-not $NoEmbeddings) {
     $cliArgs += "--build-embeddings"
 }
 if (-not [string]::IsNullOrWhiteSpace($Query)) {
-    $cliArgs += @("--query", $Query, "--limit", $Limit)
+    $cliArgs += @("--query", $Query, "--limit", $Limit, "--ranking-profile", $RankingProfile)
+    if ($Answer) {
+        $cliArgs += "--answer"
+    }
 }
 
 Write-Host "Processando lote:" -ForegroundColor Green

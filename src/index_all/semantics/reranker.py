@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from index_all.semantics.ranking_profiles import (
+    DEFAULT_RANKING_PROFILE,
+    archetype_bonus_map,
+    normalize_ranking_profile,
+    rerank_weights,
+    uses_legal_reference_scoring,
+)
 from index_all.semantics.search_engine import (
     SOURCE_KIND_PRIORITY,
     extract_primary_legal_reference,
@@ -9,27 +16,6 @@ from index_all.semantics.search_engine import (
     normalize_text,
     query_tokens,
 )
-
-SPECIALIZED_ARCHETYPE_BONUS = {
-    "legislation_normative": 0.9,
-    "legislation_amending_act": 0.9,
-    "manual_procedural": 0.8,
-    "judicial_case": 0.75,
-    "spreadsheet_structured": 0.55,
-    "xml_structured": 0.55,
-    "financial_statement_ofx": 0.55,
-}
-
-WEIGHTS = {
-    "textual": 42.0,
-    "vector": 24.0,
-    "legal_reference": 18.0,
-    "heading": 10.0,
-    "document_archetype": 6.0,
-    "source_kind": 3.0,
-    "chunk_size": 5.0,
-}
-
 
 def _normalize_text_score(score: float) -> float:
     if score <= 0:
@@ -59,12 +45,12 @@ def _heading_signal(query: str, heading_path_text: str) -> float:
     return min(hits / max(len(tokens), 1), 1.0)
 
 
-def _archetype_signal(query: str, document_archetype: str) -> float:
+def _archetype_signal(query: str, document_archetype: str, ranking_profile: str) -> float:
     normalized_archetype = normalize_text(document_archetype).replace("_", " ")
     if not normalized_archetype:
         return 0.0
 
-    bonus = SPECIALIZED_ARCHETYPE_BONUS.get(document_archetype, 0.3)
+    bonus = archetype_bonus_map(ranking_profile).get(document_archetype, 0.12 if ranking_profile == "generic" else 0.3)
     tokens = list(dict.fromkeys(query_tokens(query)))
     if not tokens:
         return min(bonus, 1.0)
@@ -128,7 +114,10 @@ def rerank_candidates(
     candidates: Sequence[Mapping[str, Any]],
     *,
     limit: int = 6,
+    ranking_profile: str = DEFAULT_RANKING_PROFILE,
 ) -> list[dict]:
+    normalized_profile = normalize_ranking_profile(ranking_profile)
+    weights = rerank_weights(normalized_profile)
     reranked: list[dict] = []
 
     for candidate in candidates:
@@ -141,13 +130,24 @@ def rerank_candidates(
         text_length = int(candidate.get("text_length") or len(" ".join(str(candidate.get("text") or "").split())))
 
         components = {
-            "textual": round(_normalize_text_score(text_score) * WEIGHTS["textual"], 4),
-            "vector": round(_normalize_vector_score(vector_score) * WEIGHTS["vector"], 4),
-            "legal_reference": round(_legal_reference_signal(query, heading_path_text, text) * WEIGHTS["legal_reference"], 4),
-            "heading": round(_heading_signal(query, heading_path_text) * WEIGHTS["heading"], 4),
-            "document_archetype": round(_archetype_signal(query, document_archetype) * WEIGHTS["document_archetype"], 4),
-            "source_kind": round(_source_kind_signal(source_kind) * WEIGHTS["source_kind"], 4),
-            "chunk_size": round(_chunk_size_signal(text_length) * WEIGHTS["chunk_size"], 4),
+            "textual": round(_normalize_text_score(text_score) * weights["textual"], 4),
+            "vector": round(_normalize_vector_score(vector_score) * weights["vector"], 4),
+            "legal_reference": round(
+                (
+                    _legal_reference_signal(query, heading_path_text, text)
+                    if uses_legal_reference_scoring(normalized_profile)
+                    else 0.0
+                )
+                * weights["legal_reference"],
+                4,
+            ),
+            "heading": round(_heading_signal(query, heading_path_text) * weights["heading"], 4),
+            "document_archetype": round(
+                _archetype_signal(query, document_archetype, normalized_profile) * weights["document_archetype"],
+                4,
+            ),
+            "source_kind": round(_source_kind_signal(source_kind) * weights["source_kind"], 4),
+            "chunk_size": round(_chunk_size_signal(text_length) * weights["chunk_size"], 4),
         }
         final_score = round(sum(components.values()), 4)
 
@@ -159,6 +159,7 @@ def rerank_candidates(
                 "text_score": round(text_score, 4),
                 "vector_score": round(vector_score, 6),
                 "text_length": text_length,
+                "ranking_profile": normalized_profile,
                 "retrieval_mode": "hybrid" if candidate.get("has_embedding") else "textual",
             }
         )

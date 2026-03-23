@@ -17,6 +17,9 @@ class Settings:
     azure_vision_endpoint: str | None
     azure_vision_key: str | None
     tesseract_cmd: str | None
+    azure_openai_endpoint: str | None = None
+    azure_openai_api_key: str | None = None
+    azure_openai_deployment: str | None = None
 
 
 def get_project_root() -> Path:
@@ -67,4 +70,16 @@ def get_settings() -> Settings:
             or os.getenv("AZURE_VISION_KEY")
         ),
         tesseract_cmd=os.getenv("INDEX_ALL_TESSERACT_CMD"),
+        azure_openai_endpoint=(
+            os.getenv("INDEX_ALL_AZURE_OPENAI_ENDPOINT")
+            or os.getenv("AZURE_OPENAI_ENDPOINT")
+        ),
+        azure_openai_api_key=(
+            os.getenv("INDEX_ALL_AZURE_OPENAI_API_KEY")
+            or os.getenv("AZURE_OPENAI_API_KEY")
+        ),
+        azure_openai_deployment=(
+            os.getenv("INDEX_ALL_AZURE_OPENAI_DEPLOYMENT")
+            or os.getenv("AZURE_OPENAI_DEPLOYMENT")
+        ),
     )

@@ -1582,6 +1582,7 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
     embeddings = semantic.get("embeddings", {}) if isinstance(semantic, dict) else {}
     retrieval_preview = semantic.get("retrieval_preview", {}) if isinstance(semantic, dict) else {}
     query_results = semantic.get("query_results", {}) if isinstance(semantic, dict) else {}
+    answer_results = semantic.get("answer_results", {}) if isinstance(semantic, dict) else {}
     sample_chunk_list = "".join(
         f"<li>{_collection_escape_html(item)}</li>"
         for item in (chunks.get("sample_headings", []) or [])[:8]
@@ -1629,6 +1630,15 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
         "</li>"
         for item in (query_results.get("results", []) or [])[:5]
     ) or "<li>Sem consulta executada via CLI.</li>"
+    answer_citations_list = "".join(
+        f"<li>[{_collection_escape_html(item.get('id'))}] {_collection_escape_html(item.get('reference'))}</li>"
+        for item in (answer_results.get("citations", []) or [])[:5]
+    ) or "<li>Sem citações registradas.</li>"
+    answer_preview_html = (
+        _collection_escape_html(answer_results.get("answer_preview"))
+        if answer_results.get("answer_preview")
+        else "Sem resposta gerada via CLI."
+    )
     duplicates_removed = (search.get("exact_duplicates_removed", 0) or 0) + (search.get("near_duplicates_removed", 0) or 0)
 
     html = f"""<!DOCTYPE html>
@@ -1798,6 +1808,7 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
       <p><strong>Estado do índice vetorial:</strong> {_collection_escape_html(embeddings.get('embedding_state', 'not_built'))}</p>
       <p><strong>Dimensão vetorial local:</strong> {_collection_escape_html(embeddings.get('vector_size', 0))}</p>
       <p><strong>Modo de retrieval:</strong> {_collection_escape_html(retrieval_preview.get('mode', 'textual_retrieval_ready'))}</p>
+      <p><strong>Perfil de ranking:</strong> {_collection_escape_html(retrieval_preview.get('ranking_profile', 'legal'))}</p>
       <ul>
         {sample_chunk_list}
       </ul>
@@ -1812,8 +1823,25 @@ def write_collection_report_html(path: Path, collection_payload: dict) -> None:
       <h3>Última Consulta CLI</h3>
       <p><strong>Query:</strong> {_collection_escape_html(query_results.get('query', ''))}</p>
       <p><strong>Hits retornados:</strong> {_collection_escape_html(query_results.get('total_hits', 0))}</p>
+      <p><strong>Perfil de ranking:</strong> {_collection_escape_html(query_results.get('ranking_profile', ''))}</p>
       <ul>
         {query_results_list}
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>Última Resposta Gerada</h2>
+      <p><strong>Status:</strong> {_collection_escape_html(answer_results.get('status', 'not_generated'))}</p>
+      <p><strong>Query:</strong> {_collection_escape_html(answer_results.get('query', ''))}</p>
+      <p><strong>Perfil de ranking:</strong> {_collection_escape_html(answer_results.get('ranking_profile', ''))}</p>
+      <p><strong>Provider:</strong> {_collection_escape_html(answer_results.get('provider', ''))}</p>
+      <p><strong>Deployment:</strong> {_collection_escape_html(answer_results.get('deployment', ''))}</p>
+      <p><strong>Response ID:</strong> {_collection_escape_html(answer_results.get('response_id', ''))}</p>
+      <p><strong>Citações registradas:</strong> {_collection_escape_html(answer_results.get('citation_count', 0))}</p>
+      <div class="collection-node" style="white-space: pre-wrap;">{answer_preview_html}</div>
+      <h3>Citações</h3>
+      <ul>
+        {answer_citations_list}
       </ul>
     </section>
   </div>

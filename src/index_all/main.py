@@ -29,11 +29,14 @@ from index_all.outputs.markdown_writer import (
 from index_all.semantics.chunker import build_collection_chunks
 from index_all.semantics.embedding_store import LocalEmbeddingStore
 from index_all.semantics.query_interface import (
+    answer_collection,
     build_embeddings_for_collection,
+    format_answer_results_for_console,
     format_query_results_for_console,
     query_collection,
     refresh_collection_outputs,
 )
+from index_all.semantics.ranking_profiles import DEFAULT_RANKING_PROFILE, RANKING_PROFILES
 from index_all.semantics.retrieval import build_retrieval_preview
 from index_all.semantics.search_engine import build_search_index
 from index_all.utils.logging_utils import configure_logging, get_logger
@@ -139,6 +142,7 @@ def process_collection(
     build_search: bool = True,
     build_chunks: bool = True,
     build_embeddings: bool = False,
+    ranking_profile: str = DEFAULT_RANKING_PROFILE,
 ) -> Path:
     processed_documents = [_load_processed_document(output_dir) for output_dir in processed_output_dirs]
     catalog = build_catalog(processed_documents)
@@ -170,7 +174,10 @@ def process_collection(
             embedding_store.build_embeddings(chunks) if build_embeddings else embedding_store.load_embeddings_payload()
         )
         chunk_payload = embedding_store.save_chunks(chunks, embedding_payload=embedding_payload)
-        retrieval_preview = build_retrieval_preview(chunk_payload.get("records", []) or [])
+        retrieval_preview = build_retrieval_preview(
+            chunk_payload.get("records", []) or [],
+            ranking_profile=ranking_profile,
+        )
 
         json_payloads["chunks.json"] = chunk_payload
         json_payloads["embeddings_index.json"] = embedding_payload
@@ -255,6 +262,11 @@ def build_parser() -> argparse.ArgumentParser:
         help='Run a collection query, for example: --query "legalidade e integridade"',
     )
     parser.add_argument(
+        "--answer",
+        action="store_true",
+        help="Generate a grounded answer with Azure OpenAI. Requires --query.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=6,
@@ -275,12 +287,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Filter query results by exact file type.",
     )
+    parser.add_argument(
+        "--ranking-profile",
+        choices=RANKING_PROFILES,
+        default=DEFAULT_RANKING_PROFILE,
+        help="Ranking profile for retrieval and answer generation.",
+    )
     return parser
 
 
 def _handle_existing_collection(collection_dir: Path, args: argparse.Namespace) -> None:
     if args.build_embeddings:
-        payload = build_embeddings_for_collection(collection_dir, force=args.force_embeddings)
+        payload = build_embeddings_for_collection(
+            collection_dir,
+            force=args.force_embeddings,
+            ranking_profile=args.ranking_profile,
+        )
         logger.info(
             "Embeddings updated for %s | embeddings=%s | reused=%s | built=%s",
             collection_dir.name,
@@ -289,22 +311,36 @@ def _handle_existing_collection(collection_dir: Path, args: argparse.Namespace) 
             (payload.get("metadata", {}) or {}).get("built_count", 0),
         )
     else:
-        refresh_collection_outputs(collection_dir)
+        refresh_collection_outputs(collection_dir, ranking_profile=args.ranking_profile)
 
     if args.query:
-        result = query_collection(
-            collection_dir,
-            args.query,
-            filters=_query_filters_from_args(args),
-            limit=max(int(args.limit), 1),
-            write_results_file=True,
-        )
-        print(format_query_results_for_console(result))
+        if args.answer:
+            result = answer_collection(
+                collection_dir,
+                args.query,
+                filters=_query_filters_from_args(args),
+                limit=max(int(args.limit), 1),
+                ranking_profile=args.ranking_profile,
+                write_results_file=True,
+            )
+            print(format_answer_results_for_console(result))
+        else:
+            result = query_collection(
+                collection_dir,
+                args.query,
+                filters=_query_filters_from_args(args),
+                limit=max(int(args.limit), 1),
+                ranking_profile=args.ranking_profile,
+                write_results_file=True,
+            )
+            print(format_query_results_for_console(result))
 
 
 def main() -> None:
     configure_logging()
     args = build_parser().parse_args()
+    if args.answer and not args.query:
+        raise ValueError("--answer requires --query.")
 
     if args.input_path is None and not _is_collection_dir(Path.cwd().resolve()):
         raise ValueError("input_path is required unless the current directory is a processed collection directory.")
@@ -354,20 +390,33 @@ def main() -> None:
             build_search=True if args.build_search is None else bool(args.build_search),
             build_chunks=True if args.build_chunks is None else bool(args.build_chunks),
             build_embeddings=bool(args.build_embeddings),
+            ranking_profile=args.ranking_profile,
         )
 
     if args.query:
         if collection_dir is None:
             logger.warning("Query mode requires a processed collection directory or a directory input.")
         else:
-            result = query_collection(
-                collection_dir,
-                args.query,
-                filters=_query_filters_from_args(args),
-                limit=max(int(args.limit), 1),
-                write_results_file=True,
-            )
-            print(format_query_results_for_console(result))
+            if args.answer:
+                result = answer_collection(
+                    collection_dir,
+                    args.query,
+                    filters=_query_filters_from_args(args),
+                    limit=max(int(args.limit), 1),
+                    ranking_profile=args.ranking_profile,
+                    write_results_file=True,
+                )
+                print(format_answer_results_for_console(result))
+            else:
+                result = query_collection(
+                    collection_dir,
+                    args.query,
+                    filters=_query_filters_from_args(args),
+                    limit=max(int(args.limit), 1),
+                    ranking_profile=args.ranking_profile,
+                    write_results_file=True,
+                )
+                print(format_query_results_for_console(result))
 
     logger.info("Done. Supported=%s | Skipped=%s", supported, skipped)
 
