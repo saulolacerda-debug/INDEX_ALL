@@ -40,3 +40,4 @@ data/processed_step3_validation/
 pytest-cache-files-*/
 pytest_tmp/
 tmp*/
+_test_artifacts/
