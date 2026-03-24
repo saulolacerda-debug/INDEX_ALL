@@ -229,7 +229,7 @@ def _looks_like_manual_document(
     parser_metadata: Mapping[str, Any],
 ) -> bool:
     parser_mode = _normalize_text(parser_metadata.get("mode"))
-    if parser_mode == "structured_manual":
+    if parser_mode in {"structured_manual", "structured_faq"}:
         return True
 
     search_text = _collect_search_text(metadata, blocks, parser_metadata, block_limit=14)
